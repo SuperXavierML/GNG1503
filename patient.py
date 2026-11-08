@@ -1,3 +1,5 @@
+## AIA
+
 NB_SYMPTOMES_CRITIQUE = 4
 NB_ANORMALES_PLANCHER = 4 
 DELAI_PLANCHER = 5 * 60 * 60
@@ -85,3 +87,8 @@ class Patient:
             return True
         return False
 
+##AIA : Partie assistée par Claude, Anthropic, 08/11/2026
+
+##J'ai utilisé Claude afin de m'aider à corriger et à nettoyer mes tests. 
+##J'ai également utilisé Claude pour créer des cas de test permettant de vérifier le fonctionnement de 
+##l'application. Le résultat final demeure le reflet de ma logique et le fruit de mon travail.
