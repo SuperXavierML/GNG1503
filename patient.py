@@ -1,18 +1,17 @@
-## AIA
+NB_SYMPTOMES_CRITIQUE = 5
+DELAI_PLANCHER = 5 * 60
+NB_ANORMALES_ALARME = 3
+NB_NORMALES_RETOUR = 3
 
-NB_SYMPTOMES_CRITIQUE = 4
-NB_ANORMALES_PLANCHER = 4 
-DELAI_PLANCHER = 5 * 60 * 60
 
 class Patient:
 
     def __init__(self, facteurRisque, nom, identifiant):
-        self.nom=nom
-        self.identifiant=identifiant
+        self.nom = nom
+        self.identifiant = identifiant
         self.compteurAnormal = 0
-        self.compteurNormal = 3
-        self.hautTension=False
- 
+        self.compteurNormal = NB_NORMALES_RETOUR
+
         if facteurRisque >= 6:
             self.seuilDiastolique = 80
             self.seuilSystolique = 130
@@ -22,73 +21,62 @@ class Patient:
             self.seuilSystolique = 140
             self.nbSecondes = 48 * 60 * 60
 
-        self.delai=self.nbSecondes
+        self.delai = self.nbSecondes
 
-    def verificationDeTension(self, derniereMesure, i ):
-        p = derniereMesure.pression[i]
-        self.hautTension = (p.diastolique >= self.seuilDiastolique
-                            or p.systolique >= self.seuilSystolique)
-        return self.hautTension
+    def calculerGrade(self, mesure, index=-1):
+        """Grade de la lecture ``index`` (0 = première, 1 = confirmation).
 
-    def confirmationDeTension(self, derniereMesure):
+        Fonction pure : ne modifie aucun compteur. Les symptômes sont ceux
+        de la mesure, y compris pour la lecture de confirmation.
+        """
+        p = mesure.pression[index]
+        points = mesure.pointsInquietude
 
-        points = derniereMesure.pointsInquietude
+        if p.diastolique >= 110 or p.systolique >= 180:
+            return 3
+        if p.diastolique >= 100 or p.systolique >= 160:
+            return 2
+        pulsee_anormale = p.pulsee() > 60 or p.pulsee() < 20
+        if (p.diastolique >= self.seuilDiastolique
+                or p.systolique >= self.seuilSystolique
+                or pulsee_anormale
+                or points >= NB_SYMPTOMES_CRITIQUE):
+            return 1
+        return 0
 
-        danger = self.verificationDeTension(derniereMesure, -1 ) or (points >= NB_SYMPTOMES_CRITIQUE)
-       
-        if (danger):
+    def enregistreValeur(self, mesure, index=-1):
+        """Valide la lecture ``index`` : met à jour compteurs et délai.
+
+        À appeler UNE seule fois par mesure (sur la lecture retenue).
+        """
+        grade = self.calculerGrade(mesure, index)
+        points = mesure.pointsInquietude
+
+        if grade >= 1:
             self.compteurNormal = 0
             self.compteurAnormal += 1
-        else:
-            self.compteurNormal += 1
-            self.compteurAnormal = max(0, self.compteurAnormal - 1)  
-
-        return self.notificationAlerte(derniereMesure)
-
-    def enregistreValeur(self, derniereMesure):
-
-        validation=False
-        points = derniereMesure.pointsInquietude
-        symptomesGraves = points >= NB_SYMPTOMES_CRITIQUE
-        frequence = 0
-        
-
-        if (self.verificationDeTension(derniereMesure,0) or (symptomesGraves)):
-            self.compteurAnormal += 1
-            self.compteurNormal = 0
-            if (self.hautTension):
-                frequence = min(1, 0.5 + 0.05 * points)
+            if grade == 3:
+                self.delai = DELAI_PLANCHER
+            elif grade == 2:
+                self.delai = self.nbSecondes * (1 - min(1, 0.7 + 0.05 * points))
             else:
-                frequence = min(1, max(0.5, 0.05 * points))
+                self.delai = self.nbSecondes * (1 - min(1, 0.5 + 0.05 * points))
         else:
             self.compteurNormal += 1
-            if (self.compteurNormal >= 3):
-                self.compteurAnormal = 0
- 
-        self.delai = self.nbSecondes * (1 - frequence)
+            self.compteurAnormal = max(0, self.compteurAnormal - 1)
+            if self.compteurNormal >= NB_NORMALES_RETOUR:
+                self.delai = self.nbSecondes
+            else:
+                # on garde le délai court jusqu'à 3 valeurs normales
+                self.delai = min(
+                    self.delai, self.nbSecondes * (1 - min(1, 0.05 * points))
+                )
 
-        if self.compteurAnormal == 1:
-            validation=True
+        self.delai = max(self.delai, DELAI_PLANCHER)
+        return grade
 
-        if ((self.compteurAnormal >= NB_ANORMALES_PLANCHER) and (self.delai < DELAI_PLANCHER)):
-            self.delai = DELAI_PLANCHER   
-
-        return validation
-    
-    def notificationAlerte(self, derniereMesure):
-        danger = self.hautTension or derniereMesure.pointsInquietude >= NB_SYMPTOMES_CRITIQUE
-        return danger and self.compteurAnormal >= 2
-    
-    def messageRassurent(self, derniereMesure):
-        points = derniereMesure.pointsInquietude
-        danger = ((self.hautTension) or (points >= NB_SYMPTOMES_CRITIQUE))
-
-        if((danger) and (self.compteurAnormal >= 2)):
+    def alarmeDeclenchee(self, grade):
+        """Grade 3 : alerte immédiate. Sinon : 3 mesures anormales."""
+        if grade >= 3:
             return True
-        return False
-
-##AIA : Partie assistée par Claude, Anthropic, 08/11/2026
-
-##J'ai utilisé Claude afin de m'aider à corriger et à nettoyer mes tests. 
-##J'ai également utilisé Claude pour créer des cas de test permettant de vérifier le fonctionnement de 
-##l'application. Le résultat final demeure le reflet de ma logique et le fruit de mon travail.
+        return grade >= 1 and self.compteurAnormal >= NB_ANORMALES_ALARME

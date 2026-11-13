@@ -1,4 +1,5 @@
 class Pression:
+    """Une lecture : pression artérielle (mmHg) et pouls (bpm)."""
 
     def __init__(self, systolique, diastolique, pouls):
         self.systolique = systolique
@@ -6,4 +7,6 @@ class Pression:
         self.pouls = pouls
 
     def pulsee(self):
-        return (self.systolique-self.diastolique)
+        """Pression pulsée = systolique - diastolique."""
+        return self.systolique - self.diastolique
+
