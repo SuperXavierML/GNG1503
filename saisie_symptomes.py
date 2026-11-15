@@ -2,7 +2,7 @@ import math
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from gestionnaire_tache import GestionnaireDeTache
+from gestionaireDeTache import GestionnaireDeTache
 from mesure import Mesure
 from patient import Patient
 
