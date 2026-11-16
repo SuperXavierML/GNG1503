@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('confirm_measurement') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="form-panel mx-auto">
+    <h1 class="h2">{{ t('confirm_measurement') }}</h1>
+    <p class="alert alert-info">{{ t('confirmation_instructions') }}</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row">
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="systolic">{{ t('systolic') }} (mmHg)</label>
+          <input class="form-control" id="systolic" name="systolic" type="number" min="1" step="1" required>
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="diastolic">{{ t('diastolic') }} (mmHg)</label>
+          <input class="form-control" id="diastolic" name="diastolic" type="number" min="1" step="1" required>
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="pulse">{{ t('pulse') }} (bpm)</label>
+          <input class="form-control" id="pulse" name="pulse" type="number" min="1" step="1" required>
+        </div>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('save_measurement') }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

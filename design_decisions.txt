@@ -1,0 +1,198 @@
+Solutions SPHM application
+
+Purpose and scope
+-----------------
+The Flask application has a public welcome page, doctor registration and
+sign-in, draft patient profiles with a risk questionnaire, one-time patient
+account linking, and a patient area for measurements, history, and preferences.
+The doctor workflow retains patient history, time-stamped notes, measurement
+comparison, and a dashboard for manually stored alerts.
+
+Messaging and automated notification delivery/alert generation are deferred.
+The existing doctor dashboard can display and acknowledge alert records, but
+this change does not create alerts automatically or send external email/SMS.
+Patient links and screens are responsive and share the English/French UI.
+
+Application structure
+---------------------
+- Flask's application factory registers separate route blueprints and adds
+  shared CSRF and translation helpers.
+- Repositories hold doctor- and patient-scoped database operations; services
+  handle risk assessment, measurement persistence, history shaping, and
+  one-time patient code linking.
+- Jinja2 templates and local CSS provide responsive interfaces. Bootstrap and
+  Chart.js are loaded from CDNs; those assets require network access.
+
+Persistence
+-----------
+- Python's built-in sqlite3 module is used without an ORM.
+- The database is configured with DATABASE_PATH or defaults to the Flask
+  instance directory.
+- Set SECRET_KEY to a stable, private value outside local development; the
+  development fallback is generated at app startup.
+- Run `flask --app run init-db` to explicitly initialize the database. Schema
+  version 2 is tracked with SQLite PRAGMA user_version; version 1 databases
+  are migrated to add a per-account theme preference. The same initialization
+  and migration also runs lazily on the first database access. Foreign keys
+  are enabled on connections.
+- Tables cover accounts, patient profiles, invites, risk-assessment answers,
+  measurements, vital readings, symptoms, alerts, and doctor notes.
+- Passwords use Werkzeug password hashing. Patient access codes are random,
+  single-use, expire after seven days, and only their hashes are persisted.
+  Redeeming a code creates the patient credentials, links the prepared profile,
+  and signs the new account in.
+
+Clinical requirements and limitations
+--------------------------------------
+- The doctor-entered questionnaire and threshold mapping below are implemented
+  from the supplied project documents, but are not clinically validated.
+  Questionnaire answers, version, calculated thresholds, and the 24-hour
+  initial interval are stored in SQLite. The score field is the unweighted
+  count of applicable factors; thresholds are calculated from separate
+  moderate/high counts.
+- The Flask monitoring service uses the current specification for blood
+  pressure grades, the 20-60 mmHg pulse-pressure check, grade-based intervals,
+  grade-change verification, and the three-normal-reading reset. It records
+  patient-entered symptoms but does not generate doctor alerts or send
+  notifications. A total symptom score greater than 5 contributes to grade 1;
+  exactly 5 is surfaced for review because the specification conflicts on that
+  boundary.
+- The old root-level `Patient` and `Mesure` calculations are not used by the
+  Flask workflow: their risk thresholds and initial delay differ from the
+  current requirements. The patient interface reuses the Flask SQLite tables
+  and patient-history service instead.
+- Messaging, alert triggers, and external notifications remain unimplemented.
+  This is a local school proof of concept, not a production-ready medical
+  records system.
+
+Validation
+----------
+Focused unit tests cover schema initialization and migration, doctor and
+patient authentication, CSRF rejection, one-time code redemption, patient
+profile ownership, questionnaire thresholds, measurement validation and
+confirmation, history, notes, comparison, and language/theme preferences.
+
+Local run
+---------
+Install the requirements with `python -m pip install -r requirements.txt`,
+initialize the database with `python -m flask --app run init-db`, then start
+the app with `python run.py`.
+
+Patient app design and risk questionnaire draft
+-----------------------------------------------
+This section records the implemented patient flow based on
+`application_specifications.md` and
+`hypertension_risk_factors_and_critical_thresholds.md`. The thresholds are
+project requirements, not clinically validated advice; a qualified clinician
+must review the questions, wording, and rules before they are used for care.
+
+Doctor-entered baseline questionnaire
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The doctor creates the patient profile, asks the questions below, and records
+the answers before making the profile ready to link. Ask for the patient's
+current information and preserve the original answers with the questionnaire
+version. Do not silently treat an unknown or unanswered risk factor as "no";
+leave the assessment pending until it is resolved or reviewed.
+
+| Key | Question | Answer and classification |
+| --- | --- | --- |
+| age_years | How old are you, in years? | Whole number; age 60 or older is one moderate factor. |
+| height_cm | What is your height in centimetres? | Positive numeric value, used with weight to calculate BMI. |
+| weight_kg | What is your weight in kilograms? | Positive numeric value, used with height to calculate BMI. |
+| alcohol_standard_drinks_per_week | In a typical week, how many standard drinks do you have? | Non-negative number; more than 2 is one moderate factor. The definition of a standard drink must be approved and explained in the UI. |
+| current_smoker | Do you currently smoke? | Yes is one moderate factor; no is not a factor. |
+| pregnant | Are you currently pregnant? | Yes is one moderate factor; no/not applicable is not a factor. Use a clinically appropriate, private way to answer. |
+| cardiovascular_disease | Have you been diagnosed with cardiovascular disease or established heart disease? | Yes is one high factor. |
+| stroke_tia_history | Have you ever had a stroke or transient ischemic attack (TIA)? | Yes is one high factor. |
+| premature_family_history | Is there a family history of premature heart disease or stroke? | Yes is one high factor. The age and family relationship meant by "premature" need clinical approval. |
+| chronic_kidney_disease | Have you been diagnosed with chronic kidney disease (CKD)? | Yes is one high factor. |
+| diabetes_type | Have you been diagnosed with diabetes? If yes, what type? | Type 1 or type 2 is one high factor; no is not a factor. |
+
+Calculate BMI as weight in kilograms divided by height in metres squared, using
+decimal arithmetic for the 25 and 30 category boundaries without rounding.
+Classify BMI below 25 as neither factor, BMI from 25 up to but not including 30
+as one moderate overweight factor, and BMI 30 or higher as one high obesity
+factor. Overweight and obesity are mutually exclusive. The form currently
+validates a non-negative whole-number age and finite positive height and
+weight; approved upper and lower input ranges still require clinical review.
+
+Risk-factor threshold mapping
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Let M be the number of applicable moderate factors and H the number of
+applicable high factors. Apply the combination rules in this order:
+
+1. If H is at least 2, or H is at least 1 and M is at least 2, set the
+   threshold to 125/75 mmHg.
+2. Otherwise, if H is at least 1, or M is at least 3, set it to
+   130/80 mmHg.
+3. Otherwise, if M is at least 1, set it to 135/85 mmHg.
+4. Otherwise, set it to 140/90 mmHg.
+
+This order preserves the specified 125/75 floor and avoids counting obesity
+as both moderate overweight and high obesity. Every profile starts with a
+24-hour measurement interval regardless of its threshold. The `risk_score`
+column stores the unweighted count of applicable factors for a simple
+summary; thresholds are derived from M and H, not that count. The assessment
+version and individual answers are retained for review.
+
+Patient app workflow and prompts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. **Link and sign in:** The patient follows the doctor's instructions, opens
+   the link-account form, enters the one-time code, email, and password, and
+   submits them together. On success, the account is linked to the single
+   doctor-prepared patient profile. Invalid, expired, and already-used codes
+   receive a generic error. The existing implementation already issues
+   cryptographically random codes, stores only a hash, expires them after
+   seven days, and permits one successful redemption. Show a newly issued code
+   only once, without caching it; do not put it in a session or persist its
+   plaintext. The doctor must complete the risk assessment before issuing a
+   code.
+2. **Patient home:** Show the next measurement due time/countdown based on the
+   saved delay, the latest reading and status, and a general reminder to follow
+   the plan discussed with the doctor when a reading needs review.
+   The disclaimer states that the app does not replace professional or
+   emergency care. No automatic doctor alert is generated.
+3. **Standard measurement:** Prompt for systolic pressure, diastolic pressure,
+   and pulse; timestamp the entry in UTC. Then ask for each tracked symptom:
+   headache, dizziness, blurred vision, shortness of breath, nosebleed,
+   fatigue, confusion, and loss of balance. For each, allow 0 ("not present")
+   or an intensity from 1 to 5.
+4. **Immediate verification:** When the hypertension grade changes from the
+   previous reading, collect a vital-sign confirmation only; do not ask for
+   symptoms again for this verification.
+5. **History:** Let the patient review blood-pressure, pulse-pressure,
+   symptom, and pulse charts for 1 week, 2 weeks, 1 month, or 6 months; allow
+   symptom series to be toggled and show gaps when a symptom was not recorded.
+   Include per-measurement details and minimum/maximum summaries.
+6. **Settings:** Patient and doctor accounts can choose English/French and a
+   light/dark theme. The theme is stored on the account and version-1 SQLite
+   databases migrate to the version-2 schema.
+7. **Messages:** Messaging and notification delivery are explicitly deferred;
+   no messaging UI, alert trigger, email, or SMS is implemented in this scope.
+
+Patient pages use the Flask application factory, patient routes, Jinja
+templates, translation helper, and SQLite repositories/services. Each patient
+request is authorized against the authenticated patient's linked profile; a
+profile identifier or invite code never grants access to another patient's
+records. Database setup and migrations remain separate from route handlers.
+
+Clinical and product decisions required before implementation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- Approve the questionnaire wording, who may answer it, and how unknown,
+  declined, or changing answers affect profile activation and reassessment.
+- Define "standard drink" and "premature" family history. Neither definition is
+  supplied, so the draft intentionally does not add a cutoff or examples.
+- Confirm accepted height, weight, and numeric ranges, units, and rounding
+  rules for BMI at the 25 and 30 boundaries.
+- Resolve the symptom-score boundary: the specification says symptoms are
+  critical when their total exceeds 5, but also says the sum must be below 5.
+  The current implementation follows the literal "exceeds 5" rule for grade 1
+  and surfaces a total of exactly 5 for review. It does not generate an alert.
+- Confirm the clinical wording and behavior for hypertension grades, pulse
+  pressure outside 20-60 mmHg, emergency guidance, and doctor notifications.
+  Immediate verification after a grade change is implemented; the separate
+  consecutive-reading alert policy remains unimplemented.
+- Review the displayed thresholds and all patient-facing instructions with a
+  qualified clinician. This school proof of concept must not present them as a
+  diagnosis or a substitute for care.

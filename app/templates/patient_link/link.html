@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('link_patient') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="form-panel mx-auto">
+    <h1 class="h2 mb-4">{{ t('link_patient') }}</h1>
+    <p class="text-muted">{{ t('patient_link_instructions') }}</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="code">{{ t('access_code') }}</label>
+        <input class="form-control" id="code" name="code" type="text" required autocomplete="one-time-code">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="email">{{ t('patient_email') }}</label>
+        <input class="form-control" id="email" name="email" type="email" required autocomplete="email">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="password">{{ t('password') }}</label>
+        <input class="form-control" id="password" name="password" type="password" minlength="8" required autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('link_patient') }}</button>
+    </form>
+    <p class="mt-3 mb-0">
+      {{ t('existing_account_prompt') }}
+      <a href="{{ url_for('auth.login') }}">{{ t('login') }}</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

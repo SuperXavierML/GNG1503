@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('history') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <h1 class="h2">{{ t('history') }} - {{ patient['display_name'] }}</h1>
+  <form class="row g-2 align-items-end mb-4" method="get">
+    <div class="col-sm-4 col-md-3">
+      <label class="form-label" for="range">{{ t('timeframe') }}</label>
+      <select class="form-select" id="range" name="range">
+        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('month', 'month'), ('six_months', 'six_months')] %}
+          <option value="{{ key }}" {{ 'selected' if timeframe == key else '' }}>{{ t(label_key) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-primary" type="submit">{{ t('confirm') }}</button>
+    </div>
+  </form>
+
+  {% if history.measurements %}
+    <div class="row g-3 mb-4">
+      {% for key, label in [('systolic', 'systolic'), ('diastolic', 'diastolic'), ('pulse_pressure', 'pulse_pressure'), ('pulse', 'pulse')] %}
+        <div class="col-6 col-lg-3">
+          <article class="role-card p-3 h-100">
+            <h2 class="h6">{{ t(label) }}</h2>
+            <p class="mb-0">{{ t('minimum') }}: {{ history.summaries[key].minimum if history.summaries[key].minimum is not none else '-' }}</p>
+            <p class="mb-0">{{ t('maximum') }}: {{ history.summaries[key].maximum if history.summaries[key].maximum is not none else '-' }}</p>
+          </article>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>{{ t('no_measurements') }}</p>
+  {% endif %}
+
+  <div class="row g-4 mb-5">
+    <div class="col-12">
+      <article class="role-card chart-panel p-3">
+        <h2 class="h5">{{ t('blood_pressure') }}</h2>
+        <canvas id="blood-pressure-chart" aria-label="{{ t('blood_pressure') }}" role="img"></canvas>
+      </article>
+    </div>
+    <div class="col-lg-8">
+      <article class="role-card chart-panel p-3">
+        <h2 class="h5">{{ t('symptoms') }}</h2>
+        <div class="symptom-controls mb-2">
+          {% for item in history.symptom_datasets %}
+            <label class="form-check form-check-inline">
+              <input class="form-check-input symptom-toggle" type="checkbox" value="{{ item.key }}" checked>
+              <span class="form-check-label">{{ item.label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <canvas id="symptom-chart" aria-label="{{ t('symptoms') }}" role="img"></canvas>
+      </article>
+    </div>
+    <div class="col-lg-4">
+      <article class="role-card chart-panel p-3">
+        <h2 class="h5">{{ t('pulse') }}</h2>
+        <canvas id="pulse-chart" aria-label="{{ t('pulse') }}" role="img"></canvas>
+      </article>
+    </div>
+  </div>
+
+  {% if history.notes %}
+    <section>
+      <h2 class="h3">{{ t('doctor_notes') }}</h2>
+      <ul class="list-group">
+        {% for note in history.notes %}
+          <li class="list-group-item">
+            <time class="small text-muted">{{ note.noted_at }}</time>
+            <p class="mb-0">{{ note.note }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  <script id="history-data" type="application/json">
+    {{ {
+      "labels": history.labels,
+      "measurements": history.measurements,
+      "symptoms": history.symptom_datasets,
+      "threshold": history.threshold,
+      "labels_text": {
+        "systolic": t('systolic'),
+        "diastolic": t('diastolic'),
+        "pulse_pressure": t('pulse_pressure'),
+        "pulse": t('pulse'),
+        "threshold": t('threshold')
+      }
+    }|tojson }}
+  </script>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/doctor_history.js') }}" defer></script>
+{% endblock %}

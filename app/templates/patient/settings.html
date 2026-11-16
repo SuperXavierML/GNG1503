@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('settings') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="form-panel">
+    <h1 class="h2 mb-4">{{ t('settings') }}</h1>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="language">{{ t('choose_language') }}</label>
+        <select class="form-select" id="language" name="language">
+          <option value="en" {{ 'selected' if preferences['preferred_language'] == 'en' else '' }}>English</option>
+          <option value="fr" {{ 'selected' if preferences['preferred_language'] == 'fr' else '' }}>Francais</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="theme">{{ t('theme') }}</label>
+        <select class="form-select" id="theme" name="theme">
+          <option value="light" {{ 'selected' if preferences['theme_preference'] == 'light' else '' }}>{{ t('light_theme') }}</option>
+          <option value="dark" {{ 'selected' if preferences['theme_preference'] == 'dark' else '' }}>{{ t('dark_theme') }}</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">{{ t('save_settings') }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

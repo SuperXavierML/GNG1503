@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('new_patient') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="form-panel">
+    <h1 class="h2 mb-4">{{ t('new_patient') }}</h1>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label class="form-label" for="display_name">{{ t('patient_name') }}</label>
+        <input class="form-control" id="display_name" name="display_name" maxlength="100" required>
+      </div>
+      <p class="alert alert-warning">{{ t('assessment_pending') }}</p>
+      <button class="btn btn-primary" type="submit">{{ t('create_profile') }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

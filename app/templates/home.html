@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome | Solutions SPHM{% endblock %}
+
+{% block content %}
+<section class="welcome-section py-5 py-lg-6">
+  <div class="container">
+    <div class="row justify-content-center text-center">
+      <div class="col-lg-9">
+        <p class="eyebrow mb-3">{{ t('public_tagline') }}</p>
+        <h1 class="display-4 fw-bold">{{ t('home_headline') }}</h1>
+        <p class="lead mx-auto mt-4">
+          {{ t('home_intro') }}
+        </p>
+      </div>
+    </div>
+    <div class="row g-4 mt-4">
+      <div class="col-md-6">
+        <article class="role-card h-100 p-4 p-lg-5">
+          <h2 class="h4">For patients</h2>
+          <p class="mb-0">
+            {{ t('patient_role_intro') }}
+          </p>
+        </article>
+      </div>
+      <div class="col-md-6">
+        <article class="role-card h-100 p-4 p-lg-5">
+          <h2 class="h4">For doctors</h2>
+          <p class="mb-0">
+            {{ t('doctor_role_intro') }}
+          </p>
+        </article>
+      </div>
+    </div>
+    <p class="disclaimer text-center mt-4 mb-0">
+      {{ t('medical_disclaimer') }}
+    </p>
+  </div>
+</section>
+{% endblock %}

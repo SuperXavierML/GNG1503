@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('record_measurement') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="form-panel mx-auto">
+    <h1 class="h2">{{ t('record_measurement') }}</h1>
+    <p class="text-muted">{{ t('measurement_instructions') }}</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row">
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="systolic">{{ t('systolic') }} (mmHg)</label>
+          <input class="form-control" id="systolic" name="systolic" type="number" min="1" step="1" required value="{{ form_values.get('systolic', '') }}">
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="diastolic">{{ t('diastolic') }} (mmHg)</label>
+          <input class="form-control" id="diastolic" name="diastolic" type="number" min="1" step="1" required value="{{ form_values.get('diastolic', '') }}">
+        </div>
+        <div class="col-sm-4 mb-3">
+          <label class="form-label" for="pulse">{{ t('pulse') }} (bpm)</label>
+          <input class="form-control" id="pulse" name="pulse" type="number" min="1" step="1" required value="{{ form_values.get('pulse', '') }}">
+        </div>
+      </div>
+
+      <fieldset class="mb-4">
+        <legend class="h5">{{ t('symptoms') }}</legend>
+        <p class="text-muted">{{ t('symptom_scale') }}</p>
+        {% for key, label in symptoms %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ key }}">{{ t(label) }}</label>
+            <select class="form-select" id="{{ key }}" name="{{ key }}" required>
+              <option value="" {{ 'selected' if not form_values.get(key) else '' }}>{{ t('select_answer') }}</option>
+              {% for intensity in range(0, 6) %}
+                <option value="{{ intensity }}" {{ 'selected' if form_values.get(key) == intensity|string else '' }}>{{ intensity }}{% if intensity == 0 %} - {{ t('not_present') }}{% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endfor %}
+      </fieldset>
+      <button class="btn btn-primary" type="submit">{{ t('save_measurement') }}</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

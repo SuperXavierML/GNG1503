@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}{{ patient['display_name'] }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+      <a href="{{ url_for('doctor.dashboard') }}">{{ t('home') }}</a>
+      <h1 class="h2 mt-2 mb-0">{{ patient['display_name'] }}</h1>
+      {% if patient['systolic_threshold'] %}
+        <p class="text-muted mt-2 mb-0">{{ t('threshold') }}: {{ patient['systolic_threshold'] }}/{{ patient['diastolic_threshold'] }} mmHg</p>
+      {% endif %}
+    </div>
+    {% if patient['profile_status'] == 'ready' %}
+      <form method="post" action="{{ url_for('doctor.create_access_code', patient_id=patient['id']) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-primary" type="submit">{{ t('issue_code') }}</button>
+      </form>
+    {% endif %}
+  </div>
+
+  {% if issued_access_code %}
+    <div class="alert alert-warning" role="status">
+      {{ t('code_ready') }} <code>{{ issued_access_code }}</code>
+      <a href="{{ url_for('patient_link.link_account') }}">{{ t('link_patient') }}</a>
+    </div>
+  {% elif patient['profile_status'] == 'pending_assessment' %}
+    <div class="alert alert-info">
+      <p>{{ t('assessment_pending') }}</p>
+      <a class="btn btn-primary" href="{{ url_for('doctor.assess_patient', patient_id=patient['id']) }}">{{ t('complete_assessment') }}</a>
+    </div>
+  {% endif %}
+
+  <form class="row g-2 align-items-end mb-4" method="get">
+    <div class="col-sm-4 col-md-3">
+      <label class="form-label" for="range">{{ t('timeframe') }}</label>
+      <select class="form-select" id="range" name="range">
+        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('month', 'month'), ('six_months', 'six_months')] %}
+          <option value="{{ key }}" {{ 'selected' if timeframe == key else '' }}>{{ t(label_key) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-primary" type="submit">{{ t('confirm') }}</button>
+    </div>
+  </form>
+
+  <h2 class="h3">{{ t('measurements') }}</h2>
+  {% if history.measurements %}
+    <div class="row g-3 mb-4">
+      {% for key, label in [('systolic', 'systolic'), ('diastolic', 'diastolic'), ('pulse_pressure', 'pulse_pressure'), ('pulse', 'pulse')] %}
+        <div class="col-6 col-lg-3">
+          <div class="role-card p-3 h-100">
+            <h3 class="h6">{{ t(label) }}</h3>
+            <p class="mb-0">{{ t('minimum') }}: {{ history.summaries[key].minimum if history.summaries[key].minimum is not none else '-' }}</p>
+            <p class="mb-0">{{ t('maximum') }}: {{ history.summaries[key].maximum if history.summaries[key].maximum is not none else '-' }}</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>{{ t('no_measurements') }}</p>
+  {% endif %}
+
+  <div class="row g-4 mb-5">
+    <div class="col-12">
+      <article class="role-card chart-panel p-3">
+        <h3 class="h5">{{ t('blood_pressure') }}</h3>
+        <canvas id="blood-pressure-chart" aria-label="{{ t('blood_pressure') }}" role="img"></canvas>
+      </article>
+    </div>
+    <div class="col-lg-8">
+      <article class="role-card chart-panel p-3">
+        <h3 class="h5">{{ t('symptoms') }}</h3>
+        <div class="symptom-controls mb-2">
+          {% for item in history.symptom_datasets %}
+            <label class="form-check form-check-inline">
+              <input class="form-check-input symptom-toggle" type="checkbox" value="{{ item.key }}" checked>
+              <span class="form-check-label">{{ item.label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+        <canvas id="symptom-chart" aria-label="{{ t('symptoms') }}" role="img"></canvas>
+      </article>
+    </div>
+    <div class="col-lg-4">
+      <article class="role-card chart-panel p-3">
+        <h3 class="h5">{{ t('pulse') }}</h3>
+        <canvas id="pulse-chart" aria-label="{{ t('pulse') }}" role="img"></canvas>
+      </article>
+    </div>
+  </div>
+
+  <section class="mb-5">
+    <h2 class="h3">{{ t('compare') }}</h2>
+    <form class="row g-2 align-items-end mb-3" method="get">
+      <input type="hidden" name="range" value="{{ timeframe }}">
+      <div class="col-md-4">
+        <label class="form-label" for="first">{{ t('first_measurement') }}</label>
+        <select class="form-select" id="first" name="first" required>
+          {% for measurement in comparison_measurements %}
+            <option value="{{ measurement.id }}">{{ measurement.measured_at }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="second">{{ t('second_measurement') }}</label>
+        <select class="form-select" id="second" name="second" required>
+          {% for measurement in comparison_measurements %}
+            <option value="{{ measurement.id }}">{{ measurement.measured_at }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-outline-primary" type="submit">{{ t('compare_button') }}</button>
+      </div>
+    </form>
+    {% if comparison %}
+      <div class="table-responsive">
+        <table class="table table-bordered">
+          <caption>{{ t('comparison_result') }}</caption>
+          <thead>
+            <tr>
+              <th>{{ t('recorded_at') }}</th>
+              <th>{{ t('grade') }}</th>
+              <th>{{ t('systolic') }}</th>
+              <th>{{ t('diastolic') }}</th>
+              <th>{{ t('pulse') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for reading in comparison %}
+              <tr>
+                <td>{{ reading.measured_at }}</td>
+                <td>{{ reading.grade if reading.grade is not none else '-' }}</td>
+                <td>{{ reading.systolic if reading.systolic is not none else '-' }}</td>
+                <td>{{ reading.diastolic if reading.diastolic is not none else '-' }}</td>
+                <td>{{ reading.pulse if reading.pulse is not none else '-' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+
+  <section>
+    <h2 class="h3">{{ t('notes') }}</h2>
+    <form method="post" action="{{ url_for('doctor.add_patient_note', patient_id=patient['id']) }}" class="mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label" for="note">{{ t('note_placeholder') }}</label>
+      <textarea class="form-control mb-2" id="note" name="note" rows="3" maxlength="5000" required></textarea>
+      <button class="btn btn-primary" type="submit">{{ t('save_note') }}</button>
+    </form>
+    {% if history.notes %}
+      <ul class="list-group">
+        {% for note in history.notes %}
+          <li class="list-group-item">
+            <time class="small text-muted">{{ note.noted_at }}</time>
+            <p class="mb-0">{{ note.note }}</p>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+
+  <script id="history-data" type="application/json">
+    {{ {
+      "labels": history.labels,
+      "measurements": history.measurements,
+      "symptoms": history.symptom_datasets,
+      "threshold": history.threshold,
+      "labels_text": {
+        "systolic": t('systolic'),
+        "diastolic": t('diastolic'),
+        "pulse_pressure": t('pulse_pressure'),
+        "pulse": t('pulse'),
+        "threshold": t('threshold')
+      }
+    }|tojson }}
+  </script>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', filename='js/doctor_history.js') }}" defer></script>
+{% endblock %}
