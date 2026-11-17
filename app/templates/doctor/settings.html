@@ -9,6 +9,11 @@
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="mb-3">
+        <label class="form-label" for="display_name">{{ t('account_display_name') }}</label>
+        <input class="form-control" id="display_name" name="display_name" type="text" maxlength="100" required value="{{ preferences['display_name'] }}">
+        <div class="form-text">{{ t('display_name_help') }}</div>
+      </div>
+      <div class="mb-3">
         <label class="form-label" for="language">{{ t('choose_language') }}</label>
         <select class="form-select" id="language" name="language">
           <option value="en" {{ 'selected' if preferences['preferred_language'] == 'en' else '' }}>English</option>

@@ -1,0 +1,75 @@
+UI Implementation Reasoning
+============================
+
+Architecture
+------------
+The existing Flask, SQLite, repository, service, and Jinja2 structure remains
+the application foundation. New features use the existing blueprints and data
+access patterns. Database initialization remains in app/database.py, separate
+from request handlers. No Python dependencies were added.
+
+Persistence and account names
+-----------------------------
+The SQLite schema advances to version 3. The migration adds a per-user
+display_name and a messages table, while preserving existing records and
+backfilling account names from email addresses. Patient account names are
+independent of doctor-managed patient-record names, as requested. Existing
+settings submissions without the new optional field continue to work.
+
+Patient History and Analysis
+----------------------------
+History is now an all-time measurement log with pressure-threshold validity,
+recording/confirmation status, and a CSV download. Validity and recording
+status are deliberately separate: a measurement is valid when systolic and
+diastolic pressures are both below the patient's assigned thresholds.
+History no longer contains charts or comparison.
+
+Analysis owns time-range controls, blood-pressure, symptom, and pulse charts,
+period statistics, and a comparison table. It retains the required existing
+periods (7 days, 14 days, 1 month, and 6 months) and adds the prototype's
+30-day option. Statistics are calculated separately for systolic pressure,
+diastolic pressure, and pulse. Standard deviation uses the population formula;
+its percentage is standard deviation divided by the absolute mean. Mean
+variation is the percentage change from the preceding period of equal length;
+the absolute change is also displayed. Mini-bars provide a visual comparison
+of current and previous-period statistics. Missing comparison data is shown
+without inventing a value.
+
+The existing grade and monitoring calculations are unchanged. Grade thresholds
+remain those in the pre-existing specifications: Grade 1 starts at the
+personalized threshold, Grade 2 at 160/100, and Grade 3 at 180/110. Red
+triangles on the charts mark each pressure that reaches its personal threshold.
+Symptom intensity labels now describe all values from 0 to 5. Symptom images
+are local Lucide SVG assets, with their license included, so icon loading does
+not require a CDN.
+
+Doctor experience and messaging
+-------------------------------
+Unread alerts are ordered by grade descending and then emission time ascending,
+so higher-severity alerts take priority and older alerts of equal severity
+appear first. Alert links open the corresponding patient's analytics. Archives
+navigation is replaced by a searchable Patients page; doctor patient records,
+notes, chart history, and measurement comparisons remain available.
+
+Patient-doctor messages are stored in the shared SQLite database and scoped to
+the linked patient profile. Routes enforce the existing patient/doctor role
+checks and doctor ownership checks. Message bodies are trimmed, required, and
+limited to 2,000 characters.
+
+Navigation, appearance, and localization
+----------------------------------------
+Authenticated navigation is fixed at the bottom and includes the new patient
+Measure and Analysis destinations, as well as Messages to preserve the
+pre-existing messaging requirement. Doctor navigation offers Home, Patients,
+Messages, and Settings. Bootstrap styling uses the template's blue palette,
+rounded controls, and panel styling across tables and buttons. New visible
+labels, status text, time ranges, and symptom adjectives are translated in
+English and French. Light/dark theme behavior is retained.
+
+Verification
+------------
+The test suite covers schema upgrades, CSV output and validity, statistical
+calculations, time-range rendering, messages, patient search, alert ordering,
+account-name separation, and local symptom icons. The existing suite also
+continues to cover authentication, risk assessment, measurement workflow, and
+doctor record ownership.

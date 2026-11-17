@@ -34,10 +34,14 @@ def register():
                 database = get_db()
                 database.execute(
                     """
-                    INSERT INTO users (email, password_hash, role)
-                    VALUES (?, ?, 'doctor')
+                    INSERT INTO users (email, display_name, password_hash, role)
+                    VALUES (?, ?, ?, 'doctor')
                     """,
-                    (email, generate_password_hash(password)),
+                    (
+                        email,
+                        email.split("@", 1)[0],
+                        generate_password_hash(password),
+                    ),
                 )
                 database.commit()
                 flash("doctor_account_created")
@@ -59,7 +63,8 @@ def login():
         password = request.form.get("password", "")
         user = get_db().execute(
             """
-            SELECT id, password_hash, role, preferred_language, theme_preference
+            SELECT id, display_name, email, password_hash, role,
+                   preferred_language, theme_preference
             FROM users WHERE email = ?
             """,
             (email,),
@@ -71,6 +76,9 @@ def login():
             session.clear()
             session["user_id"] = user["id"]
             session["user_role"] = user["role"]
+            session["display_name"] = (
+                user["display_name"] or user["email"].split("@", 1)[0]
+            )
             session["language"] = user["preferred_language"]
             session["theme"] = user["theme_preference"]
             if user["role"] == "doctor":

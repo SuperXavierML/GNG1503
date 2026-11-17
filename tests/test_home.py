@@ -45,6 +45,23 @@ class HomePageTests(unittest.TestCase):
         self.assertIn(b'<html lang="fr">', response.data)
         self.assertIn("Faciliter le suivi".encode("utf-8"), response.data)
 
+    def test_public_home_language_selector_switches_between_french_and_english(self):
+        response = self.client.get("/?language=fr")
+        self.assertIn(b'<html lang="fr">', response.data)
+        self.assertIn("Pour les patients".encode("utf-8"), response.data)
+        self.assertIn("Pour les médecins".encode("utf-8"), response.data)
+
+        response = self.client.get("/?language=en")
+        self.assertIn(b'<html lang="en">', response.data)
+        self.assertIn(b"For patients", response.data)
+        self.assertIn(b"For doctors", response.data)
+
+    def test_public_home_rejects_unsupported_language(self):
+        response = self.client.get("/?language=es")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(self.database_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

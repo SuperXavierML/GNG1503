@@ -24,12 +24,36 @@
           label: history.labels_text.systolic,
           data: readings.map((row) => row.systolic),
           borderColor: "#176b70",
+          pointBackgroundColor: readings.map((row) =>
+            row.abnormal_systolic ? "#c00000" : "#176b70",
+          ),
+          pointBorderColor: readings.map((row) =>
+            row.abnormal_systolic ? "#c00000" : "#176b70",
+          ),
+          pointStyle: readings.map((row) =>
+            row.abnormal_systolic ? "triangle" : "circle",
+          ),
+          pointRadius: readings.map((row) =>
+            row.abnormal_systolic ? 8 : 3,
+          ),
           tension: 0.2,
         },
         {
           label: history.labels_text.diastolic,
           data: readings.map((row) => row.diastolic),
           borderColor: "#d27630",
+          pointBackgroundColor: readings.map((row) =>
+            row.abnormal_diastolic ? "#c00000" : "#d27630",
+          ),
+          pointBorderColor: readings.map((row) =>
+            row.abnormal_diastolic ? "#c00000" : "#d27630",
+          ),
+          pointStyle: readings.map((row) =>
+            row.abnormal_diastolic ? "triangle" : "circle",
+          ),
+          pointRadius: readings.map((row) =>
+            row.abnormal_diastolic ? 8 : 3,
+          ),
           tension: 0.2,
         },
         {
@@ -110,4 +134,48 @@
     },
     options: lineOptions,
   });
+
+  const comparisonElement = document.getElementById("comparison-data");
+  if (comparisonElement) {
+    const comparison = JSON.parse(comparisonElement.textContent);
+    new Chart(document.getElementById("measurement-comparison-chart"), {
+      type: "line",
+      data: {
+        labels: comparison.map((reading) => reading.measured_at),
+        datasets: [
+          {
+            label: history.labels_text.systolic,
+            data: comparison.map((reading) => reading.systolic),
+            borderColor: "#b4232e",
+            tension: 0.2,
+          },
+          {
+            label: history.labels_text.diastolic,
+            data: comparison.map((reading) => reading.diastolic),
+            borderColor: "#2854dd",
+            tension: 0.2,
+          },
+          {
+            label: history.labels_text.pulse,
+            data: comparison.map((reading) => reading.pulse),
+            borderColor: "#946116",
+            yAxisID: "y1",
+            tension: 0.2,
+          },
+        ],
+      },
+      options: {
+        ...lineOptions,
+        scales: {
+          y: { beginAtZero: false, title: { display: true, text: "mmHg" } },
+          y1: {
+            position: "right",
+            beginAtZero: false,
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: history.labels_text.pulse },
+          },
+        },
+      },
+    });
+  }
 })();

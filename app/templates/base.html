@@ -7,29 +7,28 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='css/styles.css') }}" rel="stylesheet">
   </head>
-  <body data-theme="{{ session.get('theme', 'light') }}">
+  <body data-theme="{{ session.get('theme', 'light') }}" class="{{ 'has-bottom-navigation' if session.get('user_id') else '' }}">
     <a class="visually-hidden-focusable skip-link" href="#main-content">Skip to content</a>
     <header class="site-header">
       <nav class="navbar navbar-expand-md">
         <div class="container">
           <a class="navbar-brand fw-semibold" href="{{ url_for('main.home') }}">{{ t('app_name') }}</a>
           <span class="navbar-text">{{ t('monitoring') }}</span>
-          <div class="navbar-nav ms-auto flex-row flex-wrap gap-3">
-            {% if session.get('user_role') == 'doctor' %}
-              <a class="nav-link" href="{{ url_for('doctor.dashboard') }}">{{ t('home') }}</a>
-              <a class="nav-link" href="{{ url_for('doctor.dashboard', _anchor='patients') }}">{{ t('archives') }}</a>
-              <a class="nav-link" href="{{ url_for('doctor.settings') }}">{{ t('settings') }}</a>
-              <form action="{{ url_for('auth.logout') }}" method="post">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="nav-link border-0 bg-transparent" type="submit">{{ t('logout') }}</button>
+          <div class="navbar-nav ms-auto flex-row flex-wrap gap-3 align-items-center">
+            {% if request.endpoint == 'main.home' and not session.get('user_id') %}
+              <form class="public-language-form" action="{{ url_for('main.home') }}" method="get">
+                <label class="visually-hidden" for="public-language">{{ t('choose_language') }}</label>
+                <select class="form-select form-select-sm" id="public-language" name="language">
+                  <option value="en" {{ 'selected' if session.get('language', 'en') == 'en' else '' }}>English</option>
+                  <option value="fr" {{ 'selected' if session.get('language', 'en') == 'fr' else '' }}>Français</option>
+                </select>
+                <button class="btn btn-outline-primary btn-sm" type="submit">{{ t('change_language') }}</button>
               </form>
-            {% elif session.get('user_role') == 'patient' %}
-              <a class="nav-link" href="{{ url_for('patient.dashboard') }}">{{ t('home') }}</a>
-              <a class="nav-link" href="{{ url_for('patient.history') }}">{{ t('history') }}</a>
-              <a class="nav-link" href="{{ url_for('patient.settings') }}">{{ t('settings') }}</a>
+            {% endif %}
+            {% if session.get('user_id') %}
               <form action="{{ url_for('auth.logout') }}" method="post">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="nav-link border-0 bg-transparent" type="submit">{{ t('logout') }}</button>
+                <button class="btn btn-outline-primary btn-sm" type="submit">{{ t('logout') }}</button>
               </form>
             {% else %}
               <a class="nav-link" href="{{ url_for('auth.login') }}">{{ t('login') }}</a>
@@ -50,6 +49,27 @@
       </div>
       {% block content %}{% endblock %}
     </main>
+    {% if session.get('user_role') == 'patient' %}
+      <nav class="bottom-navigation" aria-label="{{ t('navigation') }}">
+        <div class="container bottom-navigation-items">
+          <a class="bottom-navigation-link" href="{{ url_for('patient.dashboard') }}" aria-current="{{ 'page' if request.endpoint == 'patient.dashboard' else 'false' }}">{{ t('home') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('patient.new_measurement') }}" aria-current="{{ 'page' if request.endpoint in ('patient.new_measurement', 'patient.confirm_measurement') else 'false' }}">{{ t('measure') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('patient.analysis') }}" aria-current="{{ 'page' if request.endpoint == 'patient.analysis' else 'false' }}">{{ t('analysis') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('patient.history') }}" aria-current="{{ 'page' if request.endpoint in ('patient.history', 'patient.export_history') else 'false' }}">{{ t('history') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('patient.messages') }}" aria-current="{{ 'page' if request.endpoint == 'patient.messages' else 'false' }}">{{ t('messages') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('patient.settings') }}" aria-current="{{ 'page' if request.endpoint == 'patient.settings' else 'false' }}">{{ t('settings') }}</a>
+        </div>
+      </nav>
+    {% elif session.get('user_role') == 'doctor' %}
+      <nav class="bottom-navigation" aria-label="{{ t('navigation') }}">
+        <div class="container bottom-navigation-items">
+          <a class="bottom-navigation-link" href="{{ url_for('doctor.dashboard') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.dashboard' else 'false' }}">{{ t('home') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('doctor.patients') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.patients', 'doctor.patient_history', 'doctor.assess_patient', 'doctor.new_patient', 'doctor.add_patient_note', 'doctor.create_access_code') else 'false' }}">{{ t('patients') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('doctor.messages') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.messages', 'doctor.patient_messages') else 'false' }}">{{ t('messages') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('doctor.settings') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.settings' else 'false' }}">{{ t('settings') }}</a>
+        </div>
+      </nav>
+    {% endif %}
     <footer class="site-footer">
       <div class="container py-4">
         <p class="mb-0">{{ t('footer_care') }}</p>

@@ -78,10 +78,10 @@ def redeem_access_code(database, code, email, password):
 
     user_result = database.execute(
         """
-        INSERT INTO users (email, password_hash, role)
-        VALUES (?, ?, 'patient')
+        INSERT INTO users (email, display_name, password_hash, role)
+        VALUES (?, ?, ?, 'patient')
         """,
-        (email, generate_password_hash(password)),
+        (email, email.split("@", 1)[0], generate_password_hash(password)),
     )
     patient_user_id = user_result.lastrowid
     updated = database.execute(

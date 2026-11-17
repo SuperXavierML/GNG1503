@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('messages') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <h1 class="h2">{{ t('messages') }}</h1>
+  {% if patients %}
+    <div class="list-group">
+      {% for patient in patients %}
+        <a class="list-group-item list-group-item-action" href="{{ url_for('doctor.patient_messages', patient_id=patient['id']) }}">
+          {{ patient['display_name'] }}
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p>{{ t('no_patients') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

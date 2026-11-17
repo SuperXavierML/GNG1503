@@ -1,6 +1,7 @@
 CREATE TABLE users (
     id INTEGER PRIMARY KEY,
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    display_name TEXT NOT NULL DEFAULT '',
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('doctor', 'patient')),
     preferred_language TEXT NOT NULL DEFAULT 'en'
@@ -122,6 +123,15 @@ CREATE TABLE doctor_notes (
     noted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY,
+    patient_profile_id INTEGER NOT NULL
+        REFERENCES patient_profiles(id) ON DELETE CASCADE,
+    sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    body TEXT NOT NULL CHECK (length(trim(body)) > 0),
+    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_patient_profiles_doctor
     ON patient_profiles(doctor_id, created_at);
 CREATE INDEX idx_measurements_patient_time
@@ -134,3 +144,5 @@ CREATE INDEX idx_doctor_notes_patient_time
     ON doctor_notes(patient_profile_id, noted_at);
 CREATE INDEX idx_patient_invites_code_expiry
     ON patient_invites(code_hash, expires_at, consumed_at);
+CREATE INDEX idx_messages_patient_time
+    ON messages(patient_profile_id, sent_at, id);

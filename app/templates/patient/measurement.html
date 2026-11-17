@@ -29,11 +29,14 @@
         <p class="text-muted">{{ t('symptom_scale') }}</p>
         {% for key, label in symptoms %}
           <div class="mb-3">
-            <label class="form-label" for="{{ key }}">{{ t(label) }}</label>
+            <label class="form-label d-flex align-items-center gap-2" for="{{ key }}">
+              <img class="symptom-icon" src="{{ url_for('static', filename='icons/' ~ symptom_icons[key] ~ '.svg') }}" alt="">
+              {{ t(label) }}
+            </label>
             <select class="form-select" id="{{ key }}" name="{{ key }}" required>
               <option value="" {{ 'selected' if not form_values.get(key) else '' }}>{{ t('select_answer') }}</option>
               {% for intensity in range(0, 6) %}
-                <option value="{{ intensity }}" {{ 'selected' if form_values.get(key) == intensity|string else '' }}>{{ intensity }}{% if intensity == 0 %} - {{ t('not_present') }}{% endif %}</option>
+                <option value="{{ intensity }}" {{ 'selected' if form_values.get(key) == intensity|string else '' }}>{{ intensity }} - {{ t('intensity_' ~ intensity) }}</option>
               {% endfor %}
             </select>
           </div>

@@ -1,9 +1,12 @@
+import csv
+import io
 from datetime import datetime, timedelta, timezone
 
 from flask import (
     Blueprint,
     abort,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -12,6 +15,7 @@ from flask import (
 )
 
 from app.database import get_db
+from app.repositories.messages import create_message, list_messages
 from app.repositories.patient import (
     get_latest_measurement,
     get_linked_patient,
@@ -24,7 +28,13 @@ from app.services.monitoring import (
     record_confirmation,
     record_measurement,
 )
-from app.services.patient_history import SYMPTOMS, TIMEFRAMES, get_patient_history
+from app.services.patient_history import (
+    SYMPTOMS,
+    SYMPTOM_ICONS,
+    TIMEFRAMES,
+    get_measurement_log,
+    get_patient_analysis,
+)
 from app.translations import translate
 
 
@@ -66,6 +76,7 @@ def dashboard():
     return render_template(
         "patient/dashboard.html",
         patient=profile,
+        account_display_name=session.get("display_name", profile["display_name"]),
         latest=latest,
         next_due_at=None if latest and latest["status"] == "pending_confirmation"
         else _next_due_at(profile, latest),
@@ -114,6 +125,7 @@ def new_measurement():
         "patient/measurement.html",
         patient=profile,
         symptoms=SYMPTOMS,
+        symptom_icons=SYMPTOM_ICONS,
         form_values=form_values,
     )
 
@@ -156,17 +168,92 @@ def confirm_measurement(measurement_id):
 @patient_required
 def history():
     profile = _current_patient()
-    timeframe = request.args.get("range", "week")
-    if timeframe not in TIMEFRAMES:
-        timeframe = "week"
-    history_data = get_patient_history(get_db(), profile, timeframe)
-    for symptom in history_data["symptom_datasets"]:
-        symptom["label"] = translate(symptom["label_key"])
     return render_template(
         "patient/history.html",
         patient=profile,
-        history=history_data,
+        account_display_name=session.get("display_name", profile["display_name"]),
+        measurements=get_measurement_log(get_db(), profile),
+    )
+
+
+@patient.route("/history.csv")
+@patient_required
+def export_history():
+    profile = _current_patient()
+    measurements = get_measurement_log(get_db(), profile)
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "measured_at",
+            "systolic_mmHg",
+            "diastolic_mmHg",
+            "pulse_bpm",
+            "valid",
+            "status",
+            "grade",
+        ]
+    )
+    for measurement in measurements:
+        writer.writerow(
+            [
+                measurement["measured_at"],
+                measurement["systolic"],
+                measurement["diastolic"],
+                measurement["pulse"],
+                "yes" if measurement["valid"] else "no",
+                measurement["status"],
+                measurement["grade"],
+            ]
+        )
+    response = make_response(output.getvalue())
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = (
+        'attachment; filename="measurements.csv"'
+    )
+    return response
+
+
+@patient.route("/analysis")
+@patient_required
+def analysis():
+    profile = _current_patient()
+    timeframe = request.args.get("range", "week")
+    if timeframe not in TIMEFRAMES:
+        timeframe = "week"
+    analysis_data = get_patient_analysis(get_db(), profile, timeframe)
+    for symptom in analysis_data["symptom_datasets"]:
+        symptom["label"] = translate(symptom["label_key"])
+    return render_template(
+        "patient/analysis.html",
+        patient=profile,
+        account_display_name=session.get("display_name", profile["display_name"]),
+        analysis=analysis_data,
         timeframe=timeframe,
+    )
+
+
+@patient.route("/messages", methods=("GET", "POST"))
+@patient_required
+def messages():
+    database = get_db()
+    profile = _current_patient()
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+        if not body:
+            flash("message_required", "error")
+        elif len(body) > 2000:
+            flash("message_too_long", "error")
+        else:
+            create_message(database, profile["id"], session["user_id"], body)
+            return redirect(url_for("patient.messages"))
+    return render_template(
+        "messages.html",
+        conversation_name=translate("your_doctor"),
+        messages=list_messages(database, profile["id"]),
+        form_action=url_for("patient.messages"),
+        back_url=url_for("patient.dashboard"),
+        back_label=translate("home"),
     )
 
 
@@ -176,26 +263,48 @@ def settings():
     if request.method == "POST":
         language = request.form.get("language")
         theme = request.form.get("theme")
-        if language not in ("en", "fr") or theme not in ("light", "dark"):
+        display_name = request.form.get("display_name")
+        if (
+            language not in ("en", "fr")
+            or theme not in ("light", "dark")
+        ):
             abort(400)
+        if display_name is not None:
+            display_name = display_name.strip()
+            if not display_name or len(display_name) > 100:
+                abort(400)
         database = get_db()
-        database.execute(
-            """
-            UPDATE users
-            SET preferred_language = ?, theme_preference = ?
-            WHERE id = ? AND role = 'patient'
-            """,
-            (language, theme, session["user_id"]),
-        )
+        if display_name is None:
+            database.execute(
+                """
+                UPDATE users
+                SET preferred_language = ?, theme_preference = ?
+                WHERE id = ? AND role = 'patient'
+                """,
+                (language, theme, session["user_id"]),
+            )
+        else:
+            database.execute(
+                """
+                UPDATE users
+                SET preferred_language = ?, theme_preference = ?, display_name = ?
+                WHERE id = ? AND role = 'patient'
+                """,
+                (language, theme, display_name, session["user_id"]),
+            )
         database.commit()
         session["language"] = language
         session["theme"] = theme
+        if display_name is not None:
+            session["display_name"] = display_name
         flash("settings_saved")
         return redirect(url_for("patient.settings"))
 
     preferences = get_db().execute(
         """
-        SELECT preferred_language, theme_preference
+        SELECT preferred_language, theme_preference,
+               COALESCE(NULLIF(display_name, ''), substr(email, 1, instr(email, '@') - 1))
+                   AS display_name
         FROM users WHERE id = ? AND role = 'patient'
         """,
         (session["user_id"],),

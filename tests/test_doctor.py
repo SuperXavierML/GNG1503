@@ -292,6 +292,11 @@ class DoctorWorkflowTests(unittest.TestCase):
             f"/doctor/patients/{patient_id}?first={first_id}&second={second_id}"
         )
         self.assertIn(b"Selected measurements", response.data)
+        self.assertIn(b'id="measurement-comparison-chart"', response.data)
+        self.assertIn(b"Difference (later - earlier)", response.data)
+        self.assertIn(b"-12 mmHg", response.data)
+        self.assertIn(b"-6 mmHg", response.data)
+        self.assertIn(b"+1 bpm", response.data)
 
         with self.app.app_context():
             database = get_db()
@@ -304,6 +309,29 @@ class DoctorWorkflowTests(unittest.TestCase):
             self.client.get(f"/doctor/patients/{patient_id}").status_code,
             404,
         )
+
+    def test_comparison_preselects_latest_readings_and_allows_same_day(self):
+        doctor_id = self.create_doctor()
+        patient_id = self.create_patient(doctor_id)
+        first_id, second_id = self.add_sample_measurements(patient_id)
+        same_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        with self.app.app_context():
+            database = get_db()
+            database.execute(
+                "UPDATE measurements SET measured_at = ? WHERE id IN (?, ?)",
+                (same_time, first_id, second_id),
+            )
+            database.commit()
+        self.sign_in()
+
+        response = self.client.get(f"/doctor/patients/{patient_id}")
+
+        self.assertIn(f'value="{second_id}" selected'.encode("utf-8"), response.data)
+        self.assertIn(f'value="{first_id}" selected'.encode("utf-8"), response.data)
+        response = self.client.get(
+            f"/doctor/patients/{patient_id}?first={first_id}&second={second_id}"
+        )
+        self.assertIn(b'id="measurement-comparison-chart"', response.data)
 
     def test_settings_persist_french_preference(self):
         doctor_id = self.create_doctor()
@@ -319,7 +347,7 @@ class DoctorWorkflowTests(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertIn("Paramètres".encode("utf-8"), response.data)
-        self.assertIn(b'<body data-theme="dark">', response.data)
+        self.assertIn(b'<body data-theme="dark"', response.data)
         with self.app.app_context():
             preferences = get_db().execute(
                 "SELECT preferred_language, theme_preference FROM users WHERE id = ?",

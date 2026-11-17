@@ -6,18 +6,21 @@
 <section class="container py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
-      <a href="{{ url_for('doctor.dashboard') }}">{{ t('home') }}</a>
+      <a href="{{ url_for('doctor.patients') }}">{{ t('patients') }}</a>
       <h1 class="h2 mt-2 mb-0">{{ patient['display_name'] }}</h1>
       {% if patient['systolic_threshold'] %}
         <p class="text-muted mt-2 mb-0">{{ t('threshold') }}: {{ patient['systolic_threshold'] }}/{{ patient['diastolic_threshold'] }} mmHg</p>
       {% endif %}
     </div>
-    {% if patient['profile_status'] == 'ready' %}
-      <form method="post" action="{{ url_for('doctor.create_access_code', patient_id=patient['id']) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-primary" type="submit">{{ t('issue_code') }}</button>
-      </form>
-    {% endif %}
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('doctor.patient_messages', patient_id=patient['id']) }}">{{ t('messages') }}</a>
+      {% if patient['profile_status'] == 'ready' %}
+        <form method="post" action="{{ url_for('doctor.create_access_code', patient_id=patient['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-primary" type="submit">{{ t('issue_code') }}</button>
+        </form>
+      {% endif %}
+    </div>
   </div>
 
   {% if issued_access_code %}
@@ -36,7 +39,7 @@
     <div class="col-sm-4 col-md-3">
       <label class="form-label" for="range">{{ t('timeframe') }}</label>
       <select class="form-select" id="range" name="range">
-        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('month', 'month'), ('six_months', 'six_months')] %}
+        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('thirty_days', 'thirty_days'), ('month', 'month'), ('six_months', 'six_months')] %}
           <option value="{{ key }}" {{ 'selected' if timeframe == key else '' }}>{{ t(label_key) }}</option>
         {% endfor %}
       </select>
@@ -100,7 +103,7 @@
         <label class="form-label" for="first">{{ t('first_measurement') }}</label>
         <select class="form-select" id="first" name="first" required>
           {% for measurement in comparison_measurements %}
-            <option value="{{ measurement.id }}">{{ measurement.measured_at }}</option>
+            <option value="{{ measurement.id }}" {{ 'selected' if measurement.id == selected_first_id else '' }}>{{ measurement.measured_at }}</option>
           {% endfor %}
         </select>
       </div>
@@ -108,40 +111,52 @@
         <label class="form-label" for="second">{{ t('second_measurement') }}</label>
         <select class="form-select" id="second" name="second" required>
           {% for measurement in comparison_measurements %}
-            <option value="{{ measurement.id }}">{{ measurement.measured_at }}</option>
+            <option value="{{ measurement.id }}" {{ 'selected' if measurement.id == selected_second_id else '' }}>{{ measurement.measured_at }}</option>
           {% endfor %}
         </select>
       </div>
       <div class="col-auto">
-        <button class="btn btn-outline-primary" type="submit">{{ t('compare_button') }}</button>
+        <button class="btn btn-outline-primary" type="submit" {{ 'disabled' if comparison_measurements|length < 2 else '' }}>{{ t('compare_button') }}</button>
       </div>
     </form>
+    {% if comparison_measurements|length < 2 %}
+      <p class="text-muted">{{ t('comparison_needs_two_readings') }}</p>
+    {% endif %}
     {% if comparison %}
+      <div class="role-card chart-panel comparison-chart p-3 mb-3">
+        <h3 class="h5">{{ t('comparison_chart') }}</h3>
+        <canvas id="measurement-comparison-chart" aria-label="{{ t('comparison_chart') }}" role="img"></canvas>
+      </div>
       <div class="table-responsive">
         <table class="table table-bordered">
           <caption>{{ t('comparison_result') }}</caption>
           <thead>
             <tr>
-              <th>{{ t('recorded_at') }}</th>
-              <th>{{ t('grade') }}</th>
-              <th>{{ t('systolic') }}</th>
-              <th>{{ t('diastolic') }}</th>
-              <th>{{ t('pulse') }}</th>
+              <th scope="col">{{ t('measurement_metric') }}</th>
+              <th scope="col">{{ t('earlier_reading') }}<br><small>{{ comparison[0].measured_at }}</small></th>
+              <th scope="col">{{ t('later_reading') }}<br><small>{{ comparison[1].measured_at }}</small></th>
+              <th scope="col">{{ t('comparison_difference') }}</th>
             </tr>
           </thead>
           <tbody>
-            {% for reading in comparison %}
+            {% for key, label, unit in [('grade', 'grade', ''), ('systolic', 'systolic', 'mmHg'), ('diastolic', 'diastolic', 'mmHg'), ('pulse', 'pulse', 'bpm')] %}
               <tr>
-                <td>{{ reading.measured_at }}</td>
-                <td>{{ reading.grade if reading.grade is not none else '-' }}</td>
-                <td>{{ reading.systolic if reading.systolic is not none else '-' }}</td>
-                <td>{{ reading.diastolic if reading.diastolic is not none else '-' }}</td>
-                <td>{{ reading.pulse if reading.pulse is not none else '-' }}</td>
+                <th scope="row">{{ t(label) }}</th>
+                <td>{{ comparison[0][key] if comparison[0][key] is not none else '-' }} {{ unit if comparison[0][key] is not none else '' }}</td>
+                <td>{{ comparison[1][key] if comparison[1][key] is not none else '-' }} {{ unit if comparison[1][key] is not none else '' }}</td>
+                {% if key == 'grade' %}
+                  <td>-</td>
+                {% elif comparison[0][key] is not none and comparison[1][key] is not none %}
+                  <td>{{ '%+d'|format(comparison[1][key] - comparison[0][key]) }} {{ unit }}</td>
+                {% else %}
+                  <td>-</td>
+                {% endif %}
               </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+      <p class="small text-muted">{{ t('comparison_difference_note') }}</p>
     {% endif %}
   </section>
 
@@ -180,6 +195,11 @@
       }
     }|tojson }}
   </script>
+  {% if comparison %}
+    <script id="comparison-data" type="application/json">
+      {{ comparison|tojson }}
+    </script>
+  {% endif %}
 </section>
 {% endblock %}
 

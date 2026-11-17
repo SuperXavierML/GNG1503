@@ -5,7 +5,7 @@ from threading import Lock
 from flask import current_app, g
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def get_db():
@@ -64,6 +64,31 @@ def initialize_database(app):
                     ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'light'
                     CHECK (theme_preference IN ('light', 'dark'));
                 PRAGMA user_version = 2;
+                COMMIT;
+                """
+            )
+            version = 2
+        if version == 2:
+            connection.executescript(
+                """
+                BEGIN IMMEDIATE;
+                ALTER TABLE users
+                    ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+                UPDATE users
+                SET display_name = substr(email, 1, instr(email, '@') - 1)
+                WHERE display_name = '';
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY,
+                    patient_profile_id INTEGER NOT NULL
+                        REFERENCES patient_profiles(id) ON DELETE CASCADE,
+                    sender_user_id INTEGER NOT NULL
+                        REFERENCES users(id) ON DELETE RESTRICT,
+                    body TEXT NOT NULL CHECK (length(trim(body)) > 0),
+                    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX idx_messages_patient_time
+                    ON messages(patient_profile_id, sent_at, id);
+                PRAGMA user_version = 3;
                 COMMIT;
                 """
             )

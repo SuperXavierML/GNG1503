@@ -1,0 +1,27 @@
+Visual and comparison update
+============================
+
+The shared stylesheet now follows the supplied template's blue palette,
+rounded panels, soft page background, focus ring, and more generous card
+spacing. The changes are centralized in the existing CSS so the Flask/Jinja
+pages retain their current layouts and Bootstrap components. Dark-mode colors
+were adjusted to match the new palette while preserving the existing theme
+setting.
+
+The public welcome page includes an English/French selector. Its choice is
+stored in the Flask session, not a database account, because visitors can
+choose a language before signing in. Successful login continues to apply the
+language saved on the user's account. Unsupported language values are rejected.
+The public audience labels and page title now use the existing translation
+helper.
+
+The doctor's comparison uses two actual saved readings. The latest two
+available readings are preselected, the result plots systolic, diastolic, and
+pulse values, and an accessible table shows their timestamps and numeric
+differences. The pulse uses a separate chart axis because it is measured on a
+different scale. The displayed differences are explicitly described as
+arithmetic, not clinical interpretation. Same-day readings may be compared
+when they are distinct records; records from another patient's profile remain
+ineligible through the existing patient-scoped database query.
+
+No schema, database dependency, or route architecture change was needed.

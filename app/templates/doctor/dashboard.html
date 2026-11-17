@@ -5,8 +5,11 @@
 {% block content %}
 <section class="container py-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-    <h1 class="h2 mb-0">{{ t('doctor_dashboard') }}</h1>
-    <a class="btn btn-primary" href="{{ url_for('doctor.new_patient') }}">{{ t('new_patient') }}</a>
+    <h1 class="h2 mb-0">{{ t('doctor_dashboard') }} - {{ account_display_name }}</h1>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-primary" href="{{ url_for('doctor.patients') }}">{{ t('patients') }}</a>
+      <a class="btn btn-primary" href="{{ url_for('doctor.new_patient') }}">{{ t('new_patient') }}</a>
+    </div>
   </div>
 
   <section class="mb-5" aria-labelledby="alerts-heading">
@@ -15,13 +18,11 @@
       <div class="list-group">
         {% for alert in alerts %}
           <article class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div>
-              <a href="{{ url_for('doctor.patient_history', patient_id=alert['patient_id']) }}">
-                {{ alert['patient_name'] }}
-              </a>
+            <a class="alert-details" href="{{ url_for('doctor.patient_history', patient_id=alert['patient_id']) }}">
+              <strong>{{ alert['patient_name'] }}</strong>
               <span class="ms-2">{{ t('grade') }} {{ alert['grade'] or '-' }} - {{ alert['reason'] }}</span>
-              <div class="small text-muted">{{ alert['created_at'] }}</div>
-            </div>
+              <span class="small text-muted d-block">{{ alert['created_at'] }}</span>
+            </a>
             <form method="post" action="{{ url_for('doctor.acknowledge_patient_alert', alert_id=alert['id']) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button class="btn btn-outline-primary btn-sm" type="submit">{{ t('acknowledge') }}</button>
@@ -34,26 +35,5 @@
     {% endif %}
   </section>
 
-  <section aria-labelledby="patients-heading" id="patients">
-    <h2 class="h3" id="patients-heading">{{ t('patients') }}</h2>
-    {% if patients %}
-      <div class="row g-3">
-        {% for patient in patients %}
-          <div class="col-md-6 col-lg-4">
-            <article class="role-card h-100 p-4">
-              <h3 class="h5">{{ patient['display_name'] }}</h3>
-              <p class="mb-2">{{ t('status_' ~ patient['profile_status']) }}</p>
-              <p class="mb-3">{{ t('new_alerts') }}: {{ patient['new_alert_count'] }}</p>
-              <a href="{{ url_for('doctor.patient_history', patient_id=patient['id']) }}">
-                {{ t('patient_history') }}
-              </a>
-            </article>
-          </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p>{{ t('no_patients') }}</p>
-    {% endif %}
-  </section>
 </section>
 {% endblock %}

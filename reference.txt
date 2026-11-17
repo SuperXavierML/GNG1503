@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Suivi tensionnel</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --fg: #111;
+      --bg: #fff;
+      --red: #c00000;
+      --blue: #1a4fa0;
+      --grey: #e9e9e9;
+      --mid: #555
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 20px;
+      color: var(--fg);
+      background: var(--bg);
+      padding-bottom: 96px
+    }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px
+    }
+
+    h1 {
+      font-size: 30px;
+      margin: 8px 0 4px
+    }
+
+    h2 {
+      font-size: 24px;
+      margin: 28px 0 10px
+    }
+
+    h3 {
+      font-size: 20px;
+      margin: 18px 0 6px
+    }
+
+    .sub {
+      color: var(--mid);
+      font-size: 16px;
+      margin: 0 0 12px
+    }
+
+    label {
+      display: block;
+      font-weight: bold;
+      margin: 14px 0 4px
+    }
+
+    input {
+      font-size: 26px;
+      padding: 12px;
+      width: 100%;
+      border: 3px solid var(--fg);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--fg)
+    }
+
+    .row {
+      display: flex;
+      gap: 12px
+    }
+
+    .row>* {
+      flex: 1
+    }
+
+    button {
+      font: inherit;
+      font-weight: bold;
+      font-size: 22px;
+      padding: 16px;
+      width: 100%;
+      margin-top: 14px;
+      border-radius: 12px;
+      border: 3px solid var(--fg);
+      background: #fff;
+      color: var(--fg);
+      cursor: pointer
+    }
+
+    button.main {
+      background: var(--fg);
+      color: #fff
+    }
+
+    button.small {
+      width: auto;
+      font-size: 16px;
+      padding: 6px 12px;
+      margin: 0
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: 4px solid var(--blue);
+      outline-offset: 2px
+    }
+
+    .seg {
+      display: flex;
+      gap: 8px;
+      margin: 10px 0
+    }
+
+    .seg button {
+      margin: 0;
+      padding: 10px;
+      font-size: 18px
+    }
+
+    .seg button.on {
+      background: var(--fg);
+      color: #fff
+    }
+
+    .msg {
+      margin-top: 16px;
+      padding: 14px;
+      border: 3px solid var(--fg);
+      border-radius: 10px;
+      font-weight: bold
+    }
+
+    .msg.bad {
+      border-color: var(--red);
+      color: var(--red)
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 18px
+    }
+
+    th,
+    td {
+      padding: 8px 6px;
+      border-bottom: 1px solid #bbb;
+      text-align: right
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left
+    }
+
+    thead th {
+      border-bottom: 3px solid var(--fg)
+    }
+
+    tr.bad td {
+      color: var(--red);
+      font-weight: bold
+    }
+
+    .scroll {
+      overflow-x: auto
+    }
+
+    nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      background: #fff;
+      border-top: 3px solid var(--fg)
+    }
+
+    nav button {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      font-size: 18px;
+      padding: 16px 4px;
+      background: #fff;
+      flex: 1
+    }
+
+    nav button.on {
+      background: var(--fg);
+      color: #fff
+    }
+
+    .chart {
+      height: 300px;
+      margin-top: 8px
+    }
+
+    .big {
+      font-size: 56px;
+      font-weight: bold;
+      line-height: 1
+    }
+  </style>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+    Chart.defaults.font.size = 14;
+
+    const api = async (url, opt) => {
+      const r = await fetch("/api" + url, opt && { ...opt, headers: { "Content-Type": "application/json" }, body: opt.body && JSON.stringify(opt.body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(typeof j.detail === "string" ? j.detail : "Valeurs invalides");
+      return j;
+    };
+    const fmt = ts => new Date(ts).toLocaleString("fr-CA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const sign = n => (n > 0 ? "+" : "") + n;
+    const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+
+    function Chart2({ type = "line", data, options }) {
+      const ref = useRef();
+      useEffect(() => {
+        const c = new Chart(ref.current, { type, data, options: { responsive: true, maintainAspectRatio: false, ...options } });
+        return () => c.destroy();
+      }, [JSON.stringify(data), JSON.stringify(options)]);
+      return <div className="chart"><canvas ref={ref} /></div>;
+    }
+
+    function StatTable({ s }) {
+      if (!s || !s.n) return <p>Aucune mesure sur cette période.</p>;
+      const L = { sys: "Systolique", dia: "Diastolique", pulse: "Pouls" };
+      return <div className="scroll">
+        <table>
+          <thead><tr><th></th><th>Moy.</th><th>Min.</th><th>Max.</th><th>É.-t.</th><th>É.-t. %</th></tr></thead>
+          <tbody>{["sys", "dia", "pulse"].map(k => s[k] && <tr key={k}>
+            <td>{L[k]}</td><td>{s[k].mean}</td><td>{s[k].min}</td><td>{s[k].max}</td><td>{s[k].sd}</td><td>{s[k].cv}</td></tr>)}
+          </tbody>
+        </table>
+        <p className="sub">{s.n} mesures, dont {s.flagged} au-dessus du seuil personnel. Pressions en mmHg, pouls en bpm.</p>
+      </div>;
+    }
+
+    function Measure({ p, onSaved }) {
+      const blank = () => ({ sys: "", dia: "", pulse: "", ts: nowLocal() });
+      const [f, setF] = useState(blank());
+      const [src, setSrc] = useState("manual");
+      const [cuff, setCuff] = useState(false);
+      const [msg, setMsg] = useState(null);
+      const set = k => e => setF({ ...f, [k]: e.target.value });
+      const sim = async () => {
+        const r = await api("/simulate");
+        setF({ ...f, sys: r.sys, dia: r.dia, pulse: r.pulse, ts: nowLocal() });
+        setSrc("bluetooth-sim"); setCuff(true); setMsg(null);
+      };
+      const save = async () => {
+        try {
+          const r = await api("/measurements", {
+            method: "POST", body: {
+              patient_id: p.id, sys: +f.sys, dia: +f.dia,
+              pulse: f.pulse ? +f.pulse : null, ts: f.ts, source: src
+            }
+          });
+          setMsg(r.flagged
+            ? { bad: true, t: `Mesure enregistrée. Elle dépasse le seuil personnel (${r.threshold[0]}/${r.threshold[1]} mmHg) et est signalée au système d'alertes.` }
+            : { t: "Mesure enregistrée. Elle est sous le seuil personnel." });
+          setF(blank()); setSrc("manual"); setCuff(false); onSaved();
+        } catch (e) { setMsg({ bad: true, t: e.message }); }
+      };
+      return <>
+        <h2>Prendre ma tension</h2>
+        <p className="sub">Branchez le tensiomètre ou écrivez les valeurs vues sur l'écran de l'appareil.</p>
+        <button onClick={sim}>{cuff ? "Tensiomètre Bluetooth : connecté. Relire" : "Lire le tensiomètre Bluetooth (simulé)"}</button>
+        <div className="row">
+          <div><label>Systolique (mmHg)</label><input type="number" inputMode="numeric" value={f.sys} onChange={set("sys")} placeholder="130" /></div>
+          <div><label>Diastolique (mmHg)</label><input type="number" inputMode="numeric" value={f.dia} onChange={set("dia")} placeholder="85" /></div>
+        </div>
+        <div className="row">
+          <div><label>Pouls (bpm, facultatif)</label><input type="number" inputMode="numeric" value={f.pulse} onChange={set("pulse")} placeholder="70" /></div>
+          <div><label>Date et heure</label><input type="datetime-local" value={f.ts} onChange={set("ts")} style={{ fontSize: 18, padding: 15 }} /></div>
+        </div>
+        <button className="main" onClick={save}>Enregistrer</button>
+        {msg && <div className={"msg" + (msg.bad ? " bad" : "")} role="status">{msg.t}</div>}
+      </>;
+    }
+
+    function Analysis({ p, rows, stats, cmp, days, setDays }) {
+      const labels = rows.map(r => fmt(r.ts));
+      const trend = {
+        labels, datasets: [
+          {
+            label: "Systolique", data: rows.map(r => r.sys), borderColor: "#1a4fa0", backgroundColor: "#1a4fa0", tension: .2,
+            pointBackgroundColor: rows.map(r => r.sys >= p.thr_sys ? "#c00000" : "#1a4fa0"), pointBorderColor: rows.map(r => r.sys >= p.thr_sys ? "#c00000" : "#1a4fa0"), pointStyle: rows.map(r => r.sys >= p.thr_sys ? "triangle" : "circle"), pointRadius: rows.map(r => r.sys >= p.thr_sys ? 9 : 3)
+          },
+          {
+            label: "Diastolique", data: rows.map(r => r.dia), borderColor: "#111", backgroundColor: "#111", tension: .2, borderDash: [2, 3],
+            pointBackgroundColor: rows.map(r => r.dia >= p.thr_dia ? "#c00000" : "#111"), pointBorderColor: rows.map(r => r.dia >= p.thr_dia ? "#c00000" : "#111"), pointStyle: rows.map(r => r.dia >= p.thr_dia ? "triangle" : "circle"), pointRadius: rows.map(r => r.dia >= p.thr_dia ? 9 : 3)
+          },
+          { label: `Seuil sys. ${p.thr_sys}`, data: rows.map(() => p.thr_sys), borderColor: "#c00000", borderDash: [8, 5], pointRadius: 0, borderWidth: 1.5 },
+          { label: `Seuil dia. ${p.thr_dia}`, data: rows.map(() => p.thr_dia), borderColor: "#c00000", borderDash: [3, 3], pointRadius: 0, borderWidth: 1.5 },
+        ]
+      };
+      const hasCmp = cmp && cmp.treatment_date && cmp.before.n && cmp.after.n;
+      return <>
+        <h2>Mes mesures</h2>
+        <div className="seg">{[7, 14, 30].map(d => <button key={d} className={days === d ? "on" : ""} onClick={() => setDays(d)}>{d} jours</button>)}</div>
+        {rows.length ? <Chart2 data={trend} options={{ scales: { x: { ticks: { maxTicksLimit: 7 } } } }} /> : <p>Aucune mesure sur cette période. Ajoutez-en une, ou chargez des données de démonstration dans Réglages.</p>}
+        <p className="sub">Les points rouges sont au-dessus du seuil personnel.</p>
+        <h2>Statistiques</h2>
+        <StatTable s={stats} />
+        <h2>Changement de moyenne</h2>
+        {!cmp || !cmp.treatment_date ? <p>Indiquez la date de début du traitement dans Réglages.</p>
+          : !hasCmp ? <p>Il faut des mesures avant et après le {cmp.treatment_date}.</p>
+            : <>
+              <Chart2 type="bar" data={{
+                labels: ["Systolique", "Diastolique"], datasets: [
+                  { label: "Avant Dernière Période", data: [cmp.before.sys.mean, cmp.before.dia.mean], backgroundColor: "#888" },
+                  { label: "Dernière Période", data: [cmp.after.sys.mean, cmp.after.dia.mean], backgroundColor: "#1a4fa0" }]
+              }}
+                options={{ scales: { y: { beginAtZero: false, title: { display: true, text: "Moyenne (mmHg)" } } } }} />
+              <p>Variation de la moyenne : systolique <b>{sign(cmp.delta.sys)} mmHg</b>, diastolique <b>{sign(cmp.delta.dia)} mmHg</b>.</p>
+              <h3>Avant le {cmp.treatment_date}</h3><StatTable s={cmp.before} />
+              <h3>Depuis le {cmp.treatment_date}</h3><StatTable s={cmp.after} />
+            </>}
+      </>;
+    }
+
+    function History({ p, rows, onChange }) {
+      const del = async id => { if (confirm("Supprimer cette mesure ?")) { await api("/measurements/" + id, { method: "DELETE" }); onChange(); } };
+      return <>
+        <h2>Historique</h2>
+        <a href={`/api/patients/${p.id}/export.csv`}><button className="small">Exporter en CSV</button></a>
+        <div className="scroll"><table>
+          <thead><tr><th>Date</th><th>Sys.</th><th>Dia.</th><th>Pouls</th><th></th></tr></thead>
+          <tbody>{[...rows].reverse().map(r => <tr key={r.id} className={r.flagged ? "bad" : ""}>
+            <td>{fmt(r.ts)}</td><td>{r.sys}</td><td>{r.dia}</td><td>{r.pulse ?? "-"}</td>
+            <td>{r.flagged && "⚠ Élevée "}<button className="small" onClick={() => del(r.id)} aria-label="Supprimer">✕</button></td></tr>)}
+          </tbody></table></div>
+        {!rows.length && <p>Aucune mesure sur cette période.</p>}
+      </>;
+    }
+
+    function Settings({ p, onChange }) {
+      const [s, setS] = useState({ thr_sys: p.thr_sys, thr_dia: p.thr_dia, treatment_date: p.treatment_date || "" });
+      const [msg, setMsg] = useState("");
+      useEffect(() => setS({ thr_sys: p.thr_sys, thr_dia: p.thr_dia, treatment_date: p.treatment_date || "" }), [p.thr_sys, p.thr_dia, p.treatment_date]);
+      const set = k => e => setS({ ...s, [k]: e.target.value });
+      const save = async () => {
+        await api("/patients/" + p.id, { method: "PATCH", body: { thr_sys: +s.thr_sys, thr_dia: +s.thr_dia, treatment_date: s.treatment_date } });
+        setMsg("Réglages enregistrés."); onChange();
+      };
+      const wipe = async () => {
+        if (!confirm("TEST : supprimer TOUTES les mesures ?")) return;
+        await api(`/patients/${p.id}/measurements`, { method: "DELETE" });
+        setMsg("Toutes les mesures ont été supprimées."); onChange();
+      };
+      const seed = async () => {
+        if (!confirm("Remplacer toutes les mesures par 30 jours de données de démonstration ?")) return;
+        await api(`/patients/${p.id}/seed`, { method: "POST" }); setMsg("Données de démonstration chargées."); onChange();
+      };
+      return <>
+        <h2>Réglages</h2>
+        <div className="row">
+          <div><label>Seuil systolique</label><input type="number" value={s.thr_sys} onChange={set("thr_sys")} /></div>
+          <div><label>Seuil diastolique</label><input type="number" value={s.thr_dia} onChange={set("thr_dia")} /></div>
+        </div>
+        <label>Début du traitement</label><input type="date" value={s.treatment_date} onChange={set("treatment_date")} />
+        <button className="main" onClick={save}>Enregistrer les réglages</button>
+        <button onClick={seed}>Charger des données de démonstration</button>
+        <button onClick={wipe} style={{ borderColor: "#c00000", color: "#c00000" }}>Supprimer toutes les données (test)</button>
+        {msg && <div className="msg" role="status">{msg}</div>}
+        <p className="sub">Une mesure est signalée quand la systolique ou la diastolique atteint le seuil. Le sous-système d'alertes utilisera les mêmes seuils.</p>
+      </>;
+    }
+
+    function App() {
+      const [tab, setTab] = useState("mesure");
+      const [days, setDays] = useState(7);
+      const [tick, setTick] = useState(0);
+      const [d, setD] = useState(null);
+      const refresh = () => setTick(t => t + 1);
+      useEffect(() => {
+        (async () => {
+          const [p, rows, stats, cmp] = await Promise.all([api("/patients/1"), api(`/patients/1/measurements?days=${days}`),
+          api(`/patients/1/stats?days=${days}`), api("/patients/1/compare")]);
+          setD({ p, rows, stats, cmp });
+        })().catch(e => alert(e.message));
+      }, [days, tick]);
+      if (!d) return <main><p>Chargement…</p></main>;
+      const tabs = [["mesure", "Mesurer"], ["analyse", "Analyse"], ["histo", "Historique"], ["reglages", "Réglages"]];
+      return <>
+        <main>
+          <h1>Suivi tensionnel</h1>
+          <p className="sub">{d.p.name}</p>
+          {tab === "mesure" && <Measure p={d.p} onSaved={refresh} />}
+          {tab === "analyse" && <Analysis {...d} days={days} setDays={setDays} />}
+          {tab === "histo" && <History p={d.p} rows={d.rows} onChange={refresh} />}
+          {tab === "reglages" && <Settings p={d.p} onChange={refresh} />}
+        </main>
+        <nav>{tabs.map(([k, l]) => <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>)}</nav>
+      </>;
+    }
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+
+</html>

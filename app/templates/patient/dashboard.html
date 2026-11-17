@@ -4,8 +4,29 @@
 
 {% block content %}
 <section class="container py-4">
-  <h1 class="h2">{{ t('patient_welcome') }}, {{ patient['display_name'] }}</h1>
+  <h1 class="h2">{{ t('patient_welcome') }}, {{ account_display_name }}</h1>
   <p class="disclaimer">{{ t('medical_disclaimer') }}</p>
+
+  {% set grade = latest['grade'] if latest and latest['grade'] is not none else 0 %}
+  {% if grade == 0 %}
+    {% set status_label = 'health_good' %}
+    {% set status_class = 'btn-success' %}
+  {% elif grade == 1 %}
+    {% set status_label = 'health_high' %}
+    {% set status_class = 'btn-warning' %}
+  {% elif grade == 2 %}
+    {% set status_label = 'health_elevated' %}
+    {% set status_class = 'status-orange' %}
+  {% else %}
+    {% set status_label = 'health_critical' %}
+    {% set status_class = 'btn-danger' %}
+  {% endif %}
+  <div class="d-flex flex-wrap align-items-center gap-2 my-3">
+    <span class="fw-semibold">{{ t('health_status') }}:</span>
+    <span class="btn {{ status_class }} status-badge" role="status">
+      {{ t(status_label) }}{% if grade %} - {{ t('grade') }} {{ grade }}{% endif %}
+    </span>
+  </div>
 
   <div class="row g-3 my-3">
     <div class="col-md-6">

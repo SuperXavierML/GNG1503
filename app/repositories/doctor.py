@@ -1,16 +1,24 @@
-def list_patients(database, doctor_id):
-    return database.execute(
-        """
+def list_patients(database, doctor_id, search=""):
+    statement = """
         SELECT p.id, p.display_name, p.profile_status, p.risk_score,
                p.created_at, COUNT(a.id) AS new_alert_count
         FROM patient_profiles AS p
         LEFT JOIN alerts AS a
             ON a.patient_profile_id = p.id AND a.acknowledged_at IS NULL
         WHERE p.doctor_id = ?
+    """
+    parameters = [doctor_id]
+    search = search.strip()
+    if search:
+        statement += " AND instr(lower(p.display_name), lower(?)) > 0"
+        parameters.append(search)
+    statement += """
         GROUP BY p.id
         ORDER BY p.created_at DESC
-        """,
-        (doctor_id,),
+    """
+    return database.execute(
+        statement,
+        parameters,
     ).fetchall()
 
 
@@ -31,11 +39,11 @@ def list_unacknowledged_alerts(database, doctor_id):
     return database.execute(
         """
         SELECT a.id, a.grade, a.reason, a.created_at,
-               p.id AS patient_id, p.display_name
+               p.id AS patient_id, p.display_name AS patient_name
         FROM alerts AS a
         JOIN patient_profiles AS p ON p.id = a.patient_profile_id
         WHERE p.doctor_id = ? AND a.acknowledged_at IS NULL
-        ORDER BY a.created_at DESC
+        ORDER BY COALESCE(a.grade, 0) DESC, a.created_at ASC, a.id ASC
         """,
         (doctor_id,),
     ).fetchall()
@@ -112,7 +120,7 @@ def get_measurement_pair(database, patient_id, first_id, second_id):
         """,
         (patient_id, first_id, second_id),
     ).fetchall()
-    if len(rows) != 2 or rows[0]["measured_at"][:10] == rows[1]["measured_at"][:10]:
+    if len(rows) != 2:
         return None
     return rows
 

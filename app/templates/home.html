@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Welcome | Solutions SPHM{% endblock %}
+{% block title %}{{ t('welcome_page_title') }} | {{ t('app_name') }}{% endblock %}
 
 {% block content %}
 <section class="welcome-section py-5 py-lg-6">
@@ -17,7 +17,7 @@
     <div class="row g-4 mt-4">
       <div class="col-md-6">
         <article class="role-card h-100 p-4 p-lg-5">
-          <h2 class="h4">For patients</h2>
+          <h2 class="h4">{{ t('patient_audience') }}</h2>
           <p class="mb-0">
             {{ t('patient_role_intro') }}
           </p>
@@ -25,7 +25,7 @@
       </div>
       <div class="col-md-6">
         <article class="role-card h-100 p-4 p-lg-5">
-          <h2 class="h4">For doctors</h2>
+          <h2 class="h4">{{ t('doctor_audience') }}</h2>
           <p class="mb-0">
             {{ t('doctor_role_intro') }}
           </p>

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('messages') }} | {{ t('app_name') }}{% endblock %}
+
+{% block content %}
+<section class="container py-4">
+  <a href="{{ back_url }}">{{ back_label }}</a>
+  <h1 class="h2 mt-2">{{ t('conversation_with') }} {{ conversation_name }}</h1>
+  <section class="role-card p-3 mb-3" aria-label="{{ t('messages') }}" aria-live="polite">
+    {% if messages %}
+      <ol class="message-list list-unstyled mb-0">
+        {% for message in messages %}
+          <li class="message-item {{ 'message-mine' if message['sender_user_id'] == session.get('user_id') else '' }}">
+            <div class="d-flex justify-content-between gap-3">
+              <strong>
+                {% if message['sender_user_id'] == session.get('user_id') %}
+                  {{ t('your_message') }}
+                {% else %}
+                  {{ message['sender_name'] }}
+                {% endif %}
+              </strong>
+              <time class="small text-muted">{{ message['sent_at'] }}</time>
+            </div>
+            <p class="mb-0 mt-1">{{ message['body'] }}</p>
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="mb-0">{{ t('no_messages') }}</p>
+    {% endif %}
+  </section>
+  <form method="post" action="{{ form_action }}" class="role-card p-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="form-label" for="body">{{ t('message_placeholder') }}</label>
+    <textarea class="form-control mb-3" id="body" name="body" rows="3" maxlength="2000" required></textarea>
+    <button class="btn btn-primary" type="submit">{{ t('send_message') }}</button>
+  </form>
+</section>
+{% endblock %}

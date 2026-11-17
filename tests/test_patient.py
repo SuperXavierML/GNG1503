@@ -178,10 +178,15 @@ class PatientWorkflowTests(unittest.TestCase):
         self.assertEqual(finalized["status"], "recorded")
         self.assertEqual(finalized["next_delay_seconds"], 12 * 60 * 60)
 
-        history = self.client.get("/patient/history?range=month")
+        history = self.client.get("/patient/history")
         self.assertEqual(history.status_code, 200)
-        self.assertIn(b"id=\"blood-pressure-chart\"", history.data)
-        self.assertIn(b"id=\"symptom-chart\"", history.data)
+        self.assertIn(b"All previous measurements", history.data)
+        self.assertIn(b"Not valid", history.data)
+        self.assertNotIn(b"id=\"blood-pressure-chart\"", history.data)
+        analysis = self.client.get("/patient/analysis?range=month")
+        self.assertEqual(analysis.status_code, 200)
+        self.assertIn(b"id=\"blood-pressure-chart\"", analysis.data)
+        self.assertIn(b"id=\"symptom-chart\"", analysis.data)
 
     def test_patient_settings_save_language_and_theme(self):
         _, _, response = self.link_patient()
@@ -198,7 +203,7 @@ class PatientWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'<html lang="fr">', response.data)
-        self.assertIn(b'<body data-theme="dark">', response.data)
+        self.assertIn(b'<body data-theme="dark"', response.data)
 
     def test_patient_routes_do_not_expose_another_profiles_confirmation(self):
         doctor_id, patient_id, response = self.link_patient()

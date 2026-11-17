@@ -32,7 +32,8 @@ def link_account():
                 session.clear()
                 patient_user = get_db().execute(
                     """
-                    SELECT id, preferred_language, theme_preference
+                    SELECT id, display_name, email, preferred_language,
+                           theme_preference
                     FROM users WHERE email = ? AND role = 'patient'
                     """,
                     (email,),
@@ -43,6 +44,10 @@ def link_account():
                     )
                 session["user_id"] = patient_user["id"]
                 session["user_role"] = "patient"
+                session["display_name"] = (
+                    patient_user["display_name"]
+                    or patient_user["email"].split("@", 1)[0]
+                )
                 session["language"] = patient_user["preferred_language"]
                 session["theme"] = patient_user["theme_preference"]
                 flash("linked")
