@@ -37,11 +37,14 @@
 | Elevated | Grade 2 | Orange |
 | Critical | Grade 3 | Red |
 
-### 3.2 History page
+### 3.2 History log
 - Purpose: a **log of all previous measurements**.
 - Each measurement shows whether it was **valid or not**.
-- The user can **view** all past measurements and **download** them as a **.csv** file.
-- It contains **no charts and no data comparison**. Those belong to the Analysis page.
+- The log and its **.csv** download are at the bottom of the Analysis page.
+- The standalone History and CSV URLs redirect to Analysis.
+- The log contains **no charts and no data comparison**. Those belong to the Analysis page.
+- The patient bottom navigation does not include Measurement or History; measurement is
+  initiated from the Home page.
 
 ### 3.3 Analysis page
 This page holds all **charts and data comparison**.
@@ -75,10 +78,19 @@ This page holds all **charts and data comparison**.
 **Interaction**
 - Tapping a notification takes the doctor **directly to that patient's analytics data**.
 
-### 4.2 Patients page (replaces Archives)
-- Remove the **Archives** page.
-- Replace it with a **Patients** page that has a **search bar and a keyboard at the top**.
-- Goal: the doctor can find a given patient quickly, even with many patients.
+### 4.2 Doctor dashboard patient list
+- Show the patient list and search bar below the alerts list on the doctor dashboard.
+- Do not provide a separate Patients page or Patients bottom-navigation option.
+- Redirect old `/doctor/patients` links to the dashboard patient-list section, preserving search.
+- Show an unread-message dot next to patient names with incoming messages that the doctor has
+  not read.
+- Each doctor's patient detail page also provides an all-time historical readings table and CSV
+  download, newest first.
+
+### 4.3 Message notifications
+- Show a red dot on the Messages bottom-navigation button when the signed-in user has unread
+  incoming messages.
+- Mark incoming messages read when the user opens the conversation.
 
 ---
 
@@ -88,11 +100,11 @@ These were ambiguous in the source text. The default shown is what the text most
 
 | # | Question | Default assumed |
 |---|---|---|
-| 1 | Final list of bottom-bar tabs for each role | Patient: Home, Measure, Analysis, History, Settings. Doctor: Home, Patients, Settings |
+| 1 | Final list of bottom-bar tabs for each role | Patient: Home, Analysis, Messages, Settings. Doctor: Home, Messages, Settings |
 | 2 | Thresholds for Grade 1, 2 and 3 | To be defined (suggest a clinical source) |
 | 3 | "Valid or not" in the history | Measurement above or below the personal threshold |
 | 4 | "Variation of the mean relative to its previous value" | Current period mean vs the previous period of the same length |
-| 5 | "Keyboard" on the Patients page | Standard search field with the device keyboard; alternative: custom on-screen or A–Z keyboard |
+| 5 | Patient search behavior on the doctor dashboard | Standard search field with the device keyboard; no custom on-screen keyboard |
 | 6 | Standard deviation formula | Population standard deviation |
 | 7 | Icon library | Local files (not a CDN), so the PWA works offline |
 | 8 | Alerts shared between patient and doctor | Requires shared storage or a backend; `template.txt` uses separate `localStorage` per page |

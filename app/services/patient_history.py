@@ -1,3 +1,5 @@
+import csv
+import io
 from math import sqrt
 
 from app.repositories.doctor import list_notes
@@ -171,6 +173,35 @@ def get_measurement_log(database, patient):
         }
         for row in rows
     ]
+
+
+def generate_measurement_csv(measurements):
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "measured_at",
+            "systolic_mmHg",
+            "diastolic_mmHg",
+            "pulse_bpm",
+            "valid",
+            "status",
+            "grade",
+        ]
+    )
+    for measurement in measurements:
+        writer.writerow(
+            [
+                measurement["measured_at"],
+                measurement["systolic"],
+                measurement["diastolic"],
+                measurement["pulse"],
+                "yes" if measurement["valid"] else "no",
+                measurement["status"],
+                measurement["grade"],
+            ]
+        )
+    return output.getvalue()
 
 
 def _period_measurements(database, patient_id, start_modifier, end_modifier):

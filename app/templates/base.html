@@ -53,10 +53,8 @@
       <nav class="bottom-navigation" aria-label="{{ t('navigation') }}">
         <div class="container bottom-navigation-items">
           <a class="bottom-navigation-link" href="{{ url_for('patient.dashboard') }}" aria-current="{{ 'page' if request.endpoint == 'patient.dashboard' else 'false' }}">{{ t('home') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('patient.new_measurement') }}" aria-current="{{ 'page' if request.endpoint in ('patient.new_measurement', 'patient.confirm_measurement') else 'false' }}">{{ t('measure') }}</a>
           <a class="bottom-navigation-link" href="{{ url_for('patient.analysis') }}" aria-current="{{ 'page' if request.endpoint == 'patient.analysis' else 'false' }}">{{ t('analysis') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('patient.history') }}" aria-current="{{ 'page' if request.endpoint in ('patient.history', 'patient.export_history') else 'false' }}">{{ t('history') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('patient.messages') }}" aria-current="{{ 'page' if request.endpoint == 'patient.messages' else 'false' }}">{{ t('messages') }}</a>
+          <a class="bottom-navigation-link message-navigation-link" href="{{ url_for('patient.messages') }}" aria-label="{{ t('messages') }}{% if has_unread_messages %}, {{ t('unread_messages') }}{% endif %}" aria-current="{{ 'page' if request.endpoint == 'patient.messages' else 'false' }}">{{ t('messages') }}{% if has_unread_messages %}<span class="message-notification-dot" aria-hidden="true"></span>{% endif %}</a>
           <a class="bottom-navigation-link" href="{{ url_for('patient.settings') }}" aria-current="{{ 'page' if request.endpoint == 'patient.settings' else 'false' }}">{{ t('settings') }}</a>
         </div>
       </nav>
@@ -64,8 +62,7 @@
       <nav class="bottom-navigation" aria-label="{{ t('navigation') }}">
         <div class="container bottom-navigation-items">
           <a class="bottom-navigation-link" href="{{ url_for('doctor.dashboard') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.dashboard' else 'false' }}">{{ t('home') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('doctor.patients') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.patients', 'doctor.patient_history', 'doctor.new_patient', 'doctor.add_patient_note', 'doctor.create_access_code') else 'false' }}">{{ t('patients') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('doctor.messages') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.messages', 'doctor.patient_messages') else 'false' }}">{{ t('messages') }}</a>
+          <a class="bottom-navigation-link message-navigation-link" href="{{ url_for('doctor.messages') }}" aria-label="{{ t('messages') }}{% if has_unread_messages %}, {{ t('unread_messages') }}{% endif %}" aria-current="{{ 'page' if request.endpoint in ('doctor.messages', 'doctor.patient_messages') else 'false' }}">{{ t('messages') }}{% if has_unread_messages %}<span class="message-notification-dot" aria-hidden="true"></span>{% endif %}</a>
           <a class="bottom-navigation-link" href="{{ url_for('doctor.settings') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.settings' else 'false' }}">{{ t('settings') }}</a>
         </div>
       </nav>

@@ -1,13 +1,15 @@
 from pathlib import Path
 import secrets
 
-from flask import Flask
+from flask import Flask, session
 
 from app.config import Config
 from app.database import (
     init_app as init_database,
+    get_db,
     initialize_database,
 )
+from app.repositories.messages import has_unread_messages
 from app.routes.auth import auth
 from app.routes.doctor import doctor
 from app.routes.main import main
@@ -42,9 +44,16 @@ def create_app(test_config=None):
 
     @app.context_processor
     def inject_template_helpers():
+        role = session.get("user_role")
+        user_id = session.get("user_id")
         return {
             "t": translate,
             "csrf_token": get_csrf_token,
+            "has_unread_messages": (
+                has_unread_messages(get_db(), user_id, role)
+                if user_id is not None and role in ("doctor", "patient")
+                else False
+            ),
         }
 
     @app.cli.command("init-db")

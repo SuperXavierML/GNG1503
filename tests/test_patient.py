@@ -198,14 +198,14 @@ class PatientWorkflowTests(unittest.TestCase):
         )
 
         history = self.client.get("/patient/history")
-        self.assertEqual(history.status_code, 200)
-        self.assertIn(b"All previous measurements", history.data)
-        self.assertIn(b"Not valid", history.data)
-        self.assertNotIn(b"id=\"blood-pressure-chart\"", history.data)
+        self.assertEqual(history.status_code, 302)
+        self.assertEqual(history.headers["Location"], "/patient/analysis")
         analysis = self.client.get("/patient/analysis?range=thirty_days")
         self.assertEqual(analysis.status_code, 200)
         self.assertIn(b"id=\"blood-pressure-chart\"", analysis.data)
         self.assertIn(b"id=\"symptom-chart\"", analysis.data)
+        self.assertIn(b"All previous measurements", analysis.data)
+        self.assertIn(b"Not valid", analysis.data)
 
     def test_first_abnormal_reading_alert_is_updated_after_confirmation(self):
         doctor_id, patient_id, _ = self.link_patient()

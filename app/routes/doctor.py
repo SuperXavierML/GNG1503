@@ -11,7 +11,11 @@ from flask import (
 )
 
 from app.database import get_db
-from app.repositories.messages import create_message, list_messages
+from app.repositories.messages import (
+    create_message,
+    list_messages,
+    mark_messages_read,
+)
 from app.repositories.doctor import (
     acknowledge_alert,
     create_note,
@@ -22,7 +26,12 @@ from app.repositories.doctor import (
     list_unacknowledged_alerts,
 )
 from app.security import doctor_required
-from app.services.patient_history import TIMEFRAMES, get_patient_history
+from app.services.patient_history import (
+    TIMEFRAMES,
+    generate_measurement_csv,
+    get_measurement_log,
+    get_patient_analysis,
+)
 from app.services.patient_linking import issue_access_code
 from app.services.risk_assessment import (
     calculate_risk_result,
@@ -41,22 +50,23 @@ doctor = Blueprint("doctor", __name__, url_prefix="/doctor")
 def dashboard():
     database = get_db()
     doctor_id = session["user_id"]
+    search = request.args.get("q", "").strip()
     return render_template(
         "doctor/dashboard.html",
         account_display_name=session.get("display_name", ""),
         alerts=list_unacknowledged_alerts(database, doctor_id),
+        patients=list_patients(database, doctor_id, search),
+        search=search,
     )
 
 
 @doctor.route("/patients")
 @doctor_required
 def patients():
-    search = request.args.get("q", "").strip()
-    return render_template(
-        "doctor/patients.html",
-        patients=list_patients(get_db(), session["user_id"], search),
-        search=search,
-    )
+    arguments = {"_anchor": "patients"}
+    if "q" in request.args:
+        arguments["q"] = request.args["q"]
+    return redirect(url_for("doctor.dashboard", **arguments))
 
 
 @doctor.route("/messages")
@@ -77,6 +87,7 @@ def patient_messages(patient_id):
     patient = get_patient(database, session["user_id"], patient_id)
     if patient is None:
         abort(404)
+    mark_messages_read(database, patient_id, session["user_id"])
     if request.method == "POST":
         body = request.form.get("body", "").strip()
         if not body:
@@ -149,7 +160,7 @@ def _render_patient_history(patient_id, issued_access_code=None):
     timeframe = request.args.get("range", "week")
     if timeframe not in TIMEFRAMES:
         timeframe = "week"
-    history = get_patient_history(database, patient, timeframe)
+    history = get_patient_analysis(database, patient, timeframe)
     for symptom in history["symptom_datasets"]:
         symptom["label"] = translate(symptom["label_key"])
 
@@ -176,6 +187,7 @@ def _render_patient_history(patient_id, issued_access_code=None):
             "doctor/patient_history.html",
             patient=patient,
             history=history,
+            all_measurements=get_measurement_log(database, patient),
             timeframe=timeframe,
             timeframes=TIMEFRAMES,
             comparison=comparison,
@@ -187,6 +199,22 @@ def _render_patient_history(patient_id, issued_access_code=None):
     )
     if issued_access_code is not None:
         response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@doctor.route("/patients/<int:patient_id>/history.csv")
+@doctor_required
+def export_patient_history(patient_id):
+    database = get_db()
+    patient = get_patient(database, session["user_id"], patient_id)
+    if patient is None:
+        abort(404)
+    measurements = get_measurement_log(database, patient)
+    response = make_response(generate_measurement_csv(measurements))
+    response.headers["Content-Type"] = "text/csv; charset=utf-8"
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="patient-{patient_id}-measurements.csv"'
+    )
     return response
 
 

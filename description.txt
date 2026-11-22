@@ -1,0 +1,321 @@
+PROGRAM DEBRIEF
+================
+
+1. GENERAL OVERVIEW
+
+The project is a Flask proof-of-concept for blood-pressure monitoring. It has separate
+doctor and patient experiences and supports account registration/login, risk assessment,
+patient invitation and linking, vital-sign measurement, confirmation readings, symptom
+tracking, health grading, alerts, history, analysis, notes, and messaging. The application
+uses server-rendered Jinja2 pages, Bootstrap 5 styling, SQLite persistence, and English/French
+translations. It is organized into application factories, blueprints, repositories, services,
+templates, static assets, database initialization, and tests.
+
+FRONT END
+---------
+- The front end is server-rendered with Jinja2 templates in app/templates.
+- Bootstrap 5 is loaded from a CDN in templates/base.html; app/static/css/styles.css provides
+  the project-specific responsive layout and light/dark theme variables.
+- Shared navigation is role-aware: public pages expose sign-in/register/link actions, patient
+  pages use a patient bottom navigation, and doctor pages use a doctor bottom navigation.
+- Front-end behavior is limited and focused: local_time.js formats timestamps in Toronto time;
+  patient_dashboard.js counts down to the next reading; doctor_history.js renders Chart.js
+  history/comparison graphs and copies invite codes.
+- Forms are bilingual and include Bootstrap controls. POST forms include a CSRF hidden token.
+- The public home page has an English/French selector. Signed-in language and theme preferences
+  are stored in the session and database and can be changed from settings pages.
+- The UI is a school proof of concept, not a medical device or diagnosis system.
+
+BACK END
+--------
+- run.py creates the Flask application and starts a debug server on host 0.0.0.0.
+- app/__init__.py implements the application factory, loads configuration, initializes the
+  database, registers all blueprints, sets up CSRF protection, adds template helpers, and
+  provides the init-db Flask CLI command.
+- Blueprints separate public/auth, doctor, patient, and account-linking routes.
+- app/security.py manages CSRF tokens, session establishment, and doctor/patient route guards.
+- app/database.py obtains one SQLite connection per Flask application context, enables foreign
+  keys, initializes/migrates the schema, and closes connections at teardown.
+- app/services contains clinical and workflow logic: monitoring grades and delays,
+  risk assessment and thresholds, patient linking, and history/analysis calculations.
+- app/repositories contains SQL-focused functions for patient, doctor, and message data.
+- Passwords are hashed by Werkzeug. Invite codes are random tokens whose SHA-256 hash is stored.
+- SQLite transactions and ownership checks are used for writes and for protecting profile data.
+
+DATABASE
+--------
+- SQLite is used as the persistence engine. The default database is
+  instance/hypertension.sqlite3; DATABASE_PATH can override it.
+- app/schema.sql defines users, patient_profiles, patient_invites, risk_assessments,
+  risk_answers, measurements, vital_readings, symptom_entries, alerts, doctor_notes, and
+  messages. Foreign keys are enabled and several indexes support common queries.
+- initialize_database() supports schema versions 0 through 3 and performs migrations from
+  versions 1 and 2. It rejects databases from a newer unsupported schema version.
+- Typical relationships are: doctor -> patient profiles -> measurements/vital readings/
+  symptoms/alerts/notes; a patient user links to one profile; assessments contain answer rows;
+  invite codes are one-time links; and messages belong to a patient profile.
+
+
+2. EVERY APPLICATION METHOD/FUNCTION
+
+Application entry and configuration
+- run.py: module execution; calls create_app(), assigns app, and starts app.run(debug=True,
+  host="0.0.0.0") when run as a script.
+- app/__init__.py create_app(test_config=None): builds/configures Flask, creates the default
+  secret/database settings, initializes database support, registers blueprints and CSRF, and
+  injects translation/CSRF helpers.
+- Nested inject_template_helpers(): provides t() and csrf_token() to Jinja templates.
+- Nested init_db_command(): initializes the database through the Flask CLI init-db command.
+- app/config.py Config: configuration container for DATABASE_PATH and SECRET_KEY environment
+  settings, plus TESTING.
+
+Security
+- app/security.py get_csrf_token(): creates/retrieves a per-session CSRF token.
+- protect_csrf(): rejects state-changing POST requests whose form token differs from the
+  session token.
+- establish_user_session(user): clears and initializes a user session with id, role,
+  display name, language, and theme.
+- doctor_required(view): decorator that redirects non-doctors to login.
+- nested wrapped(*args, **kwargs): executes the guarded route only for doctors.
+- patient_required(view): decorator that redirects non-patients to login.
+- nested wrapped(*args, **kwargs): executes the guarded route only for patients.
+
+Database
+- app/database.py get_db(): lazily initializes the schema and returns a SQLite connection
+  stored on Flask's g object.
+- close_db(error=None): closes/removes the application-context database connection.
+- init_app(app): registers teardown cleanup and thread-safe schema-initialization state.
+- initialize_database(app): creates or migrates the SQLite database according to SCHEMA_VERSION.
+
+Translations
+- app/translations.py translate(key): selects the session language and returns the matching
+  text, falling back to English and then to the raw key.
+
+Public routes
+- app/routes/main.py home(): reads an optional en/fr language selector and renders home.html.
+- app/routes/auth.py register(): validates and creates a doctor account, hashing its password,
+  establishing the session, and redirecting to the doctor dashboard.
+- login(): validates email/password, establishes the role-specific session, and redirects.
+- logout(): clears the session and returns to the public home page.
+- app/routes/patient_link.py link_account(): validates/redeems a patient invite code and
+  creates/links a patient account.
+
+Doctor routes
+- app/routes/doctor.py dashboard(): shows unacknowledged alerts and the searchable patient list
+  for the signed-in doctor.
+- patients(): redirects legacy /doctor/patients links to the dashboard's patient-list section,
+  preserving a supplied search query.
+- messages(): lists patient profiles available for doctor-patient messaging.
+- patient_messages(patient_id): displays/sends a message for an owned patient profile.
+- new_patient(): parses and validates risk answers/threshold overrides and creates a ready
+  patient profile.
+- patient_history(patient_id): renders history, timeframe statistics, and optional measurement
+  comparison.
+- _render_patient_history(...): performs owned-profile checks, timeframe filtering,
+  history/comparison retrieval, and access-code rendering.
+- add_patient_note(patient_id): validates and creates a doctor note.
+- create_access_code(patient_id): issues a one-time patient access code.
+- acknowledge_patient_alert(alert_id): acknowledges an owned alert.
+- settings(): reads or validates/updates the doctor's language, theme, and display name.
+
+Patient routes
+- app/routes/patient.py require_pending_confirmation(): before-request guard that redirects
+  patients with pending confirmations to the confirmation page.
+- _current_patient(): gets the current user's linked patient profile or aborts.
+- _parse_utc(value): parses SQLite/UTC timestamp text and attaches UTC timezone.
+- _next_due_at(profile, latest): calculates an ISO UTC next-reading date.
+- dashboard(): shows patient status and next due countdown.
+- new_measurement(): validates vitals/symptoms, records a reading, and redirects to
+  confirmation if required.
+- confirm_measurement(measurement_id): validates ownership and records a confirmation reading.
+- history(): renders all recorded measurements for the patient.
+- export_history(): creates and downloads measurements.csv.
+- analysis(): renders timeframe population statistics and previous-period comparisons.
+- messages(): displays/sends the patient's messages to the doctor.
+- settings(): reads or updates the patient's language, theme, and display name.
+
+Repositories
+- app/repositories/doctor.py list_patients(database, doctor_id, search=""): lists the doctor's
+  profiles, latest grades, alert counts, per-patient unread-message state, and optional name
+  matches.
+- get_patient(...): retrieves one owned patient profile.
+- list_unacknowledged_alerts(...): joins alerts to patients/measurements, includes the patient's
+  unread-message state, and orders unread alerts by severity and creation time.
+- acknowledge_alert(...): transactionally acknowledges an owned unread alert.
+- create_draft_patient(...): creates a pending-assessment patient profile.
+- list_notes(...): lists doctor notes for a patient, newest first.
+- create_note(...): inserts a doctor note.
+- get_measurement_pair(...): retrieves exactly two owned measurements for comparison.
+- list_comparison_measurements(...): lists eligible measurements from the previous 30 days.
+- app/repositories/patient.py get_linked_patient(...): gets a user's linked patient profile.
+- get_latest_measurement(...): gets the latest measurement and preferred confirmed/initial vitals.
+- get_owned_measurement(...): checks measurement ownership and retrieves it.
+- app/repositories/messages.py list_messages(...): retrieves a conversation in chronological order.
+- create_message(...): inserts a message and returns its ID.
+
+Monitoring service
+- app/services/monitoring.py parse_vitals(form): validates integer, positive systolic,
+  diastolic, and pulse values.
+- parse_symptoms(form): requires all eight symptom intensities and validates 0-5.
+- classify_grade(...): calculates grade 0-3 using fixed critical ranges, patient thresholds,
+  pulse pressure, and symptom total.
+- _next_delay(...): calculates the next delay from grade, symptoms, and recent normal readings.
+- _timestamp(): creates a UTC timestamp.
+- _update_measurement_alert(...): creates or updates an alert associated with a measurement.
+- record_measurement(...): atomically stores initial vital readings, symptoms, grade/status,
+  delay, and optional alert.
+- record_confirmation(...): atomically records confirmation vitals and recalculates grade,
+  status, delay, and alert.
+
+Risk assessment service
+- app/services/risk_assessment.py parse_risk_answers(form): validates numeric and yes/no
+  questionnaire inputs.
+- calculate_risk_result(answers): calculates BMI and moderate/high factors, risk score,
+  thresholds, and 24-hour initial delay.
+- parse_threshold_overrides(form): validates an optional positive, ordered systolic/diastolic
+  override pair.
+- _serialize_answers(answers): converts answer values to JSON strings for database storage.
+- create_patient_profile(...): validates data and atomically creates a ready profile, assessment,
+  and answer rows.
+- save_risk_assessment(...): validates/owns a profile and adds a reassessment, updating profile
+  status and thresholds.
+
+Patient linking service
+- app/services/patient_linking.py _utc_timestamp(value): converts datetime values to ISO UTC text.
+- _code_hash(code): SHA-256 hashes an access code.
+- issue_access_code(...): validates readiness/ownership, invalidates old invites, creates a
+  seven-day random code, stores only its hash, and returns the plain code once.
+- redeem_access_code(...): atomically validates an unexpired invite, creates a patient account,
+  links the profile, and consumes the invite.
+
+History/analysis service
+- app/services/patient_history.py get_patient_history(...): builds the timeframe measurement,
+  symptom datasets, summaries, notes, thresholds, and abnormal flags.
+- Nested values(field): gets non-null observations for a summary.
+- get_measurement_log(...): returns all measurements with confirmation preference and validity
+  flags.
+- _period_measurements(...): retrieves systolic/diastolic/pulse rows for a previous period.
+- _statistics(rows, field): calculates count, mean, min/max, standard deviation, and relative
+  standard deviation.
+- get_patient_analysis(...): combines history data with current/prior statistics and graph scales.
+
+Client-side methods
+- app/static/js/local_time.js: IIFE that selects en-CA/fr-CA formatting, adds
+  window.formatMeasurementTimestamp(), and converts elements marked data-utc-time.
+- app/static/js/patient_dashboard.js: IIFE that starts a one-second countdown for next readings.
+- app/static/js/doctor_history.js: IIFE that copies access codes and creates Chart.js blood
+  pressure, symptom, pulse, and two-reading comparison charts. Its symptom toggle listeners
+  show/hide chart datasets.
+
+
+3. EVERY SOURCE AND PROJECT FILE
+
+Top-level executable/legacy modules
+- run.py: Flask launch entry point.
+- gestionaireDeTache.py: legacy French task manager class that orchestrates initial readings,
+  confirmation readings, grade validation, and alerts.
+- mesure.py: legacy French measurement model containing initial/confirmation pressure readings
+  and eight symptom intensities.
+- patient.py: legacy French patient model for thresholds, grade calculation, counters, delays,
+  and alarm decision logic.
+- pression.py: legacy French pressure-reading model for systolic/diastolic/pulse and pulse pressure.
+
+Python application modules
+- app/__init__.py: application factory and CLI setup.
+- app/config.py: environment-backed configuration.
+- app/database.py: SQLite connection lifecycle and schema migrations.
+- app/security.py: CSRF and role/session protection.
+- app/schema.sql: canonical database schema and indexes.
+- app/translations.py: English/French text dictionary and translation lookup.
+- app/routes/__init__.py: route package marker.
+- app/routes/main.py: public home route.
+- app/routes/auth.py: register, login, and logout routes.
+- app/routes/doctor.py: doctor dashboard, patients, history, notes, alerts, invite, message,
+  and settings routes.
+- app/routes/patient.py: patient dashboard, readings, confirmation, history/CSV, analysis,
+  messages, and settings routes.
+- app/routes/patient_link.py: patient invite redemption route.
+- app/repositories/__init__.py: repository package marker.
+- app/repositories/doctor.py: doctor-owned profile, alert, note, and comparison SQL.
+- app/repositories/patient.py: linked-patient and owned-measurement SQL.
+- app/repositories/messages.py: patient conversation SQL.
+- app/services/__init__.py: service package marker.
+- app/services/monitoring.py: vital/symptom parsing, grades, delays, and measurement transactions.
+- app/services/patient_history.py: history/log/analysis calculations.
+- app/services/patient_linking.py: invite generation and redemption.
+- app/services/risk_assessment.py: risk questionnaire, thresholds, and assessment persistence.
+
+Templates
+- app/templates/base.html: shared document shell, Bootstrap imports, language selector,
+  role navigation, flashes, footer, and scripts.
+- app/templates/home.html: public information and role audience page.
+- app/templates/auth/login.html: sign-in form.
+- app/templates/auth/register.html: doctor account creation form.
+- app/templates/patient_link/link.html: patient invite/account linking form.
+- app/templates/messages.html: shared doctor/patient conversation template.
+- app/templates/doctor/dashboard.html: doctor alert dashboard and searchable patient list.
+- app/templates/_statistics_table.html: shared timeframe statistics table for doctor and patient
+  analytics.
+- app/templates/doctor/new_patient.html: risk questionnaire and threshold override form.
+- app/templates/doctor/patient_history.html: patient statistics table, history charts, notes,
+  comparison, and access-code UI.
+- app/templates/doctor/_risk_questionnaire_fields.html: reusable questionnaire field partial.
+- app/templates/doctor/messages.html: doctor conversation selector.
+- app/templates/doctor/settings.html: doctor display-name, language, and theme settings.
+- app/templates/patient/dashboard.html: next-reading status and countdown.
+- app/templates/patient/measurement.html: new vital/symptom measurement form.
+- app/templates/patient/confirmation.html: confirmation-reading form.
+- app/templates/patient/history.html: patient measurement log and CSV download.
+- app/templates/patient/analysis.html: patient statistics and graph comparisons.
+- app/templates/patient/settings.html: patient display-name, language, and theme settings.
+
+Static assets
+- app/static/css/styles.css: application layout, cards, navigation, theme variables, forms,
+  charts, and responsive styling.
+- app/static/js/local_time.js: UTC-to-local timestamp conversion.
+- app/static/js/patient_dashboard.js: next-reading countdown.
+- app/static/js/doctor_history.js: access-code copy, Chart.js history, symptom, pulse,
+  and comparison charts.
+- app/static/icons/*.svg: local icons for blood-pressure/symptom UI and activity:
+  activity, battery-low, brain, droplet, eye-off, move-horizontal, rotate-cw, and wind.
+- app/static/icons/LICENSE.txt: icon asset licensing information.
+
+Database and runtime
+- instance/hypertension.sqlite3: the default SQLite database, created/used at runtime.
+- requirements.txt: declares Flask >=3.0,<4.0.
+- .gitignore: excludes files the project does not track.
+
+Tests
+- tests/test_database.py: SQLite initialization repeatability, migration from versions 1 and 2,
+  and Flask CLI initialization.
+- tests/test_home.py: public home behavior, database initialization, language selection,
+  and invalid-language handling.
+- tests/test_monitoring.py: grade boundaries and pulse-pressure/symptom effects.
+- tests/test_risk_assessment.py: threshold rules, BMI boundaries, invalid questionnaire answers,
+  and threshold overrides.
+- tests/test_doctor.py: doctor account/routing/CSRF, risk assessment, invite codes, history,
+  comparisons, settings, alerts, profile/measurement rules, and expiry.
+- tests/test_patient.py: patient account/linking, measurement and confirmation workflow,
+  history, settings, route ownership, validation, and normal-reading delay behavior.
+- tests/test_ui_requirements.py: history/CSV, dashboard timestamp, population analysis,
+  validity, messaging/search, display names, icons, patient grades, and alert ordering.
+
+Documentation and project specifications
+- ReadMe.txt: brief AI-assistance disclosure.
+- UI_requirements.md: UI and interaction requirements.
+- application_specifications.md: application behavior specification.
+- specifications.md: functional specification.
+- hypertension_risk_factors_and_critical_thresholds.md: hypertension risk factors and threshold
+  rules used by the application.
+- design_decisions.txt: design rationale.
+- design_update_notes.txt: notes from UI/design updates.
+- requested_changes_reasoning.txt: reasoning for requested implementation changes.
+- ui_implementation_reasoning.txt: rationale for UI implementation choices.
+- reference.txt: reference/support material.
+- template.txt: template or planning text.
+- .github/copilot-instructions.md: repository-specific Copilot/workspace guidance.
+
+Generated/non-source files
+- __pycache__/ and app/**/__pycache__/ contain Python bytecode cache files.
+- app/static/icon assets are local SVG files; no JavaScript package manifest or Node.js build
+  system is present.

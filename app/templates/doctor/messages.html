@@ -9,7 +9,12 @@
     <div class="list-group">
       {% for patient in patients %}
         <a class="list-group-item list-group-item-action" href="{{ url_for('doctor.patient_messages', patient_id=patient['id']) }}">
-          {{ patient['display_name'] }}
+          <span class="patient-name">
+            {{ patient['display_name'] }}
+            {% if patient['has_unread_messages'] %}
+              <span class="patient-unread-dot" role="img" aria-label="{{ t('unread_messages') }}"></span>
+            {% endif %}
+          </span>
         </a>
       {% endfor %}
     </div>

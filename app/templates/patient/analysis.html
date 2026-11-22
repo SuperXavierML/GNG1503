@@ -1,15 +1,7 @@
 {% extends "base.html" %}
+{% from "_statistics_table.html" import statistics_table %}
 
 {% block title %}{{ t('analysis') }} | {{ t('app_name') }}{% endblock %}
-
-{% macro stat_bars(summary, metric) %}
-  <div class="stat-bars" role="img" aria-label="{{ t('current_period') }} {{ summary['graphs'][metric]['current'] }}%, {{ t('previous_period') }} {{ summary['graphs'][metric]['previous'] }}%">
-    <span class="stat-bar-label">{{ t('current_period') }}</span>
-    <span class="stat-bar-track"><span class="stat-bar-current" style="width: {{ summary['graphs'][metric]['current'] }}%"></span></span>
-    <span class="stat-bar-label">{{ t('previous_period') }}</span>
-    <span class="stat-bar-track"><span class="stat-bar-previous" style="width: {{ summary['graphs'][metric]['previous'] }}%"></span></span>
-  </div>
-{% endmacro %}
 
 {% block content %}
 <section class="container py-4">
@@ -59,44 +51,7 @@
     <h2 class="h3">{{ t('statistics') }}</h2>
     <p class="text-muted">{{ t('population_sd_note') }}</p>
     {% if analysis.measurements %}
-      <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
-          <caption>{{ t('statistics') }}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{{ t('measurement_metric') }}</th>
-              <th scope="col">{{ t('mean') }}</th>
-              <th scope="col">{{ t('minimum') }}</th>
-              <th scope="col">{{ t('maximum') }}</th>
-              <th scope="col">{{ t('standard_deviation') }}</th>
-              <th scope="col">{{ t('standard_deviation_percent') }}</th>
-              <th scope="col">{{ t('mean_variation_percent') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for key, label, unit in [('systolic', 'systolic', 'mmHg'), ('diastolic', 'diastolic', 'mmHg'), ('pulse', 'pulse', 'bpm')] %}
-              {% set stat = analysis.statistics[key] %}
-              <tr>
-                <th scope="row">{{ t(label) }}</th>
-                <td>{{ stat['mean'] if stat['mean'] is not none else '-' }}{% if stat['mean'] is not none %} {{ unit }}{% endif %}{{ stat_bars(stat, 'mean') }}</td>
-                <td>{{ stat['minimum'] if stat['minimum'] is not none else '-' }}{% if stat['minimum'] is not none %} {{ unit }}{% endif %}</td>
-                <td>{{ stat['maximum'] if stat['maximum'] is not none else '-' }}{% if stat['maximum'] is not none %} {{ unit }}{% endif %}</td>
-                <td>{{ stat['standard_deviation'] if stat['standard_deviation'] is not none else '-' }}{% if stat['standard_deviation'] is not none %} {{ unit }}{% endif %}{{ stat_bars(stat, 'standard_deviation') }}</td>
-                <td>{{ stat['standard_deviation_percent'] if stat['standard_deviation_percent'] is not none else '-' }}{% if stat['standard_deviation_percent'] is not none %}%{% endif %}{{ stat_bars(stat, 'standard_deviation_percent') }}</td>
-                <td>
-                  {% if stat['mean_variation_percent'] is not none %}
-                    {{ '%+.2f'|format(stat['mean_variation_percent']) }}%
-                    <span class="small text-muted">({{ '%+.2f'|format(stat['mean_delta']) }} {{ unit }})</span>
-                    {{ stat_bars(stat, 'mean_variation_percent') }}
-                  {% else %}
-                    -
-                  {% endif %}
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
+      {{ statistics_table(analysis, t) }}
       <p class="small text-muted">{{ t('previous_period') }}: {{ t(timeframe) }}.</p>
     {% else %}
       <p>{{ t('no_measurements') }}</p>
@@ -138,6 +93,49 @@
     </div>
     {% if not analysis.measurements %}
       <p class="text-muted">{{ t('no_measurements') }}</p>
+    {% endif %}
+  </section>
+
+  <section class="mt-5" id="measurement-history">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+      <h2 class="h3 mb-0">{{ t('all_measurements') }}</h2>
+      <a class="btn btn-primary" href="{{ url_for('patient.export_analysis_history') }}">{{ t('export_csv') }}</a>
+    </div>
+    <p>{{ t('measurement_validity_note') }}</p>
+    {% if all_measurements %}
+      <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+          <caption>{{ t('all_measurements') }}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{{ t('recorded_at') }}</th>
+              <th scope="col">{{ t('systolic') }}</th>
+              <th scope="col">{{ t('diastolic') }}</th>
+              <th scope="col">{{ t('pulse') }}</th>
+              <th scope="col">{{ t('valid') }}</th>
+              <th scope="col">{{ t('measurement_status') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for measurement in all_measurements %}
+              <tr>
+                <td><time datetime="{{ measurement['measured_at'] }}" data-utc-time="{{ measurement['measured_at'] }}">{{ measurement['measured_at'] }}</time></td>
+                <td>{{ measurement['systolic'] }} mmHg</td>
+                <td>{{ measurement['diastolic'] }} mmHg</td>
+                <td>{{ measurement['pulse'] }} bpm</td>
+                <td>
+                  <span class="badge {{ 'text-bg-success' if measurement['valid'] else 'text-bg-danger' }}">
+                    {{ t('valid') if measurement['valid'] else t('not_valid') }}
+                  </span>
+                </td>
+                <td>{{ t('measurement_status_' ~ measurement['status']) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>{{ t('no_history_measurements') }}</p>
     {% endif %}
   </section>
 

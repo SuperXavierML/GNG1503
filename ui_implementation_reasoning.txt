@@ -47,9 +47,11 @@ Doctor experience and messaging
 -------------------------------
 Unread alerts are ordered by grade descending and then emission time ascending,
 so higher-severity alerts take priority and older alerts of equal severity
-appear first. Alert links open the corresponding patient's analytics. Archives
-navigation is replaced by a searchable Patients page; doctor patient records,
-notes, chart history, and measurement comparisons remain available.
+appear first. Alert links open the corresponding patient's analytics. The
+searchable patient list is shown below alerts on the doctor dashboard; the
+separate Patients page and bottom-navigation item are removed. A red dot marks
+patient names with unread incoming messages. Doctor patient records, notes,
+chart history, and measurement comparisons remain available.
 
 Patient-doctor messages are stored in the shared SQLite database and scoped to
 the linked patient profile. Routes enforce the existing patient/doctor role
@@ -60,8 +62,8 @@ Navigation, appearance, and localization
 ----------------------------------------
 Authenticated navigation is fixed at the bottom and includes the new patient
 Measure and Analysis destinations, as well as Messages to preserve the
-pre-existing messaging requirement. Doctor navigation offers Home, Patients,
-Messages, and Settings. Bootstrap styling uses the template's blue palette,
+pre-existing messaging requirement. Doctor navigation offers Home, Messages,
+and Settings; the searchable patient list is on Home below the alerts. Bootstrap styling uses the template's blue palette,
 rounded controls, and panel styling across tables and buttons. New visible
 labels, status text, time ranges, and symptom adjectives are translated in
 English and French. Light/dark theme behavior is retained.

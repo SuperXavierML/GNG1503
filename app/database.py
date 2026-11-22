@@ -5,7 +5,7 @@ from threading import Lock
 from flask import current_app, g
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def get_db():
@@ -56,6 +56,7 @@ def initialize_database(app):
                 + schema
                 + f"\nPRAGMA user_version = {SCHEMA_VERSION};\nCOMMIT;"
             )
+            version = SCHEMA_VERSION
         elif version == 1:
             connection.executescript(
                 """
@@ -89,6 +90,19 @@ def initialize_database(app):
                 CREATE INDEX idx_messages_patient_time
                     ON messages(patient_profile_id, sent_at, id);
                 PRAGMA user_version = 3;
+                COMMIT;
+                """
+            )
+            version = 3
+        if version == 3:
+            connection.executescript(
+                """
+                BEGIN IMMEDIATE;
+                ALTER TABLE messages ADD COLUMN read_at TEXT;
+                UPDATE messages SET read_at = sent_at;
+                CREATE INDEX idx_messages_unread
+                    ON messages(patient_profile_id, sender_user_id, read_at);
+                PRAGMA user_version = 4;
                 COMMIT;
                 """
             )

@@ -122,6 +122,7 @@ a:hover {
 }
 
 .bottom-navigation-link {
+  position: relative;
   display: flex;
   min-height: 2.75rem;
   align-items: center;
@@ -133,6 +134,32 @@ a:hover {
   text-align: center;
   text-decoration: none;
   overflow-wrap: anywhere;
+}
+
+.message-notification-dot {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: #d71920;
+}
+
+.patient-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.patient-unread-dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: #d71920;
 }
 
 .bottom-navigation-link:hover,

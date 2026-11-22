@@ -1,5 +1,3 @@
-import csv
-import io
 from datetime import datetime, timedelta, timezone
 
 from flask import (
@@ -15,7 +13,11 @@ from flask import (
 )
 
 from app.database import get_db
-from app.repositories.messages import create_message, list_messages
+from app.repositories.messages import (
+    create_message,
+    list_messages,
+    mark_messages_read,
+)
 from app.repositories.patient import (
     get_latest_measurement,
     get_linked_patient,
@@ -32,6 +34,7 @@ from app.services.patient_history import (
     SYMPTOMS,
     SYMPTOM_ICONS,
     TIMEFRAMES,
+    generate_measurement_csv,
     get_measurement_log,
     get_patient_analysis,
 )
@@ -191,46 +194,21 @@ def confirm_measurement(measurement_id):
 @patient.route("/history")
 @patient_required
 def history():
-    profile = _current_patient()
-    return render_template(
-        "patient/history.html",
-        patient=profile,
-        account_display_name=session.get("display_name", profile["display_name"]),
-        measurements=get_measurement_log(get_db(), profile),
-    )
+    return redirect(url_for("patient.analysis"))
 
 
 @patient.route("/history.csv")
 @patient_required
 def export_history():
+    return redirect(url_for("patient.analysis"))
+
+
+@patient.route("/analysis.csv")
+@patient_required
+def export_analysis_history():
     profile = _current_patient()
     measurements = get_measurement_log(get_db(), profile)
-    output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "measured_at",
-            "systolic_mmHg",
-            "diastolic_mmHg",
-            "pulse_bpm",
-            "valid",
-            "status",
-            "grade",
-        ]
-    )
-    for measurement in measurements:
-        writer.writerow(
-            [
-                measurement["measured_at"],
-                measurement["systolic"],
-                measurement["diastolic"],
-                measurement["pulse"],
-                "yes" if measurement["valid"] else "no",
-                measurement["status"],
-                measurement["grade"],
-            ]
-        )
-    response = make_response(output.getvalue())
+    response = make_response(generate_measurement_csv(measurements))
     response.headers["Content-Type"] = "text/csv; charset=utf-8"
     response.headers["Content-Disposition"] = (
         'attachment; filename="measurements.csv"'
@@ -253,6 +231,7 @@ def analysis():
         patient=profile,
         account_display_name=session.get("display_name", profile["display_name"]),
         analysis=analysis_data,
+        all_measurements=get_measurement_log(get_db(), profile),
         timeframe=timeframe,
     )
 
@@ -262,6 +241,7 @@ def analysis():
 def messages():
     database = get_db()
     profile = _current_patient()
+    mark_messages_read(database, profile["id"], session["user_id"])
     if request.method == "POST":
         body = request.form.get("body", "").strip()
         if not body:

@@ -98,24 +98,32 @@ class UIRequirementTests(unittest.TestCase):
             database.commit()
         return measured_at
 
-    def test_patient_history_has_only_log_and_downloads_all_rows_as_csv(self):
+    def test_patient_analysis_includes_all_history_and_downloads_csv(self):
         measured_at = self.add_measurement(1, 120, 80)
         self.add_measurement(2, 140, 95)
         self.sign_in("patient")
 
-        page = self.client.get("/patient/history")
+        legacy_page = self.client.get("/patient/history")
+        self.assertEqual(legacy_page.status_code, 302)
+        self.assertEqual(legacy_page.headers["Location"], "/patient/analysis")
+
+        page = self.client.get("/patient/analysis")
         self.assertEqual(page.status_code, 200)
         self.assertIn(b"All previous measurements", page.data)
         self.assertIn(b"Valid", page.data)
         self.assertIn(b"Not valid", page.data)
-        self.assertNotIn(b"blood-pressure-chart", page.data)
-        self.assertNotIn(b"Compare measurements", page.data)
+        self.assertIn(b"blood-pressure-chart", page.data)
+        self.assertIn(b"Compare measurements", page.data)
         self.assertIn(
             f'data-utc-time="{measured_at}"'.encode("utf-8"),
             page.data,
         )
 
-        response = self.client.get("/patient/history.csv")
+        legacy_csv = self.client.get("/patient/history.csv")
+        self.assertEqual(legacy_csv.status_code, 302)
+        self.assertEqual(legacy_csv.headers["Location"], "/patient/analysis")
+
+        response = self.client.get("/patient/analysis.csv")
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/csv", response.headers["Content-Type"])
         self.assertIn("attachment", response.headers["Content-Disposition"])
@@ -123,6 +131,17 @@ class UIRequirementTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertIn("yes", [row[4] for row in rows])
         self.assertIn("no", [row[4] for row in rows])
+
+    def test_patient_bottom_navigation_omits_measurement_and_history(self):
+        self.sign_in("patient")
+
+        dashboard = self.client.get("/patient/")
+
+        navigation = dashboard.data.split(b'<nav class="bottom-navigation"', 1)[1]
+        navigation = navigation.split(b"</nav>", 1)[0]
+        self.assertNotIn(b">Measure<", navigation)
+        self.assertNotIn(b">History<", navigation)
+        self.assertIn(b'href="/patient/measurements/new"', dashboard.data)
 
     def test_dashboard_omits_pulse_pressure_notice_and_keeps_timestamp(self):
         measured_at = self.add_measurement(0, 130, 65)
@@ -219,29 +238,71 @@ class UIRequirementTests(unittest.TestCase):
         response = self.client.post(
             "/patient/messages",
             data={"csrf_token": "ui-test-token", "body": "Hello doctor"},
-            follow_redirects=True,
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Hello doctor", response.data)
+        self.assertEqual(response.status_code, 302)
 
         self.sign_in("doctor")
-        response = self.client.get("/doctor/patients?q=Patient")
+        notification = self.client.get("/doctor/")
+        self.assertIn(b'class="message-notification-dot"', notification.data)
+        self.assertIn(b'class="patient-unread-dot"', notification.data)
+        response = self.client.get("/doctor/messages")
+        self.assertIn(b'class="patient-unread-dot"', response.data)
+        redirect_response = self.client.get("/doctor/patients?q=Patient")
+        self.assertEqual(redirect_response.status_code, 302)
+        self.assertEqual(
+            redirect_response.headers["Location"],
+            "/doctor/?q=Patient#patients",
+        )
+        response = self.client.get("/doctor/?q=Patient")
         self.assertIn(b'type="search"', response.data)
         self.assertIn(b"Patient One", response.data)
-        response = self.client.get("/doctor/patients?q=missing")
+        redirect_response = self.client.get("/doctor/patients?q=missing")
+        self.assertEqual(redirect_response.status_code, 302)
+        response = self.client.get("/doctor/?q=missing")
         self.assertIn(b"No patients match this search", response.data)
+        conversation = self.client.get(
+            f"/doctor/patients/{self.patient_id}/messages"
+        )
+        self.assertNotIn(
+            b'class="message-notification-dot"', conversation.data
+        )
+        with self.app.app_context():
+            read_at = get_db().execute(
+                "SELECT read_at FROM messages WHERE body = 'Hello doctor'"
+            ).fetchone()["read_at"]
+        self.assertIsNotNone(read_at)
         response = self.client.post(
             f"/doctor/patients/{self.patient_id}/messages",
             data={"csrf_token": "ui-test-token", "body": "I received your note"},
-            follow_redirects=True,
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"I received your note", response.data)
+        self.assertEqual(response.status_code, 302)
 
         self.sign_in("patient")
+        notification = self.client.get("/patient/")
+        self.assertIn(b'class="message-notification-dot"', notification.data)
         response = self.client.get("/patient/messages")
+        self.assertNotIn(b'class="message-notification-dot"', response.data)
         self.assertIn(b"Hello doctor", response.data)
         self.assertIn(b"I received your note", response.data)
+
+    def test_doctor_patient_history_table_and_csv_include_all_readings(self):
+        old_timestamp = self.add_measurement(45, 120, 80)
+        self.add_measurement(1, 140, 95)
+        self.sign_in("doctor")
+
+        page = self.client.get(f"/doctor/patients/{self.patient_id}?range=week")
+
+        self.assertEqual(page.status_code, 200)
+        self.assertIn(b"All previous measurements", page.data)
+        self.assertIn(f'data-utc-time="{old_timestamp}"'.encode(), page.data)
+
+        response = self.client.get(
+            f"/doctor/patients/{self.patient_id}/history.csv"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response.headers["Content-Type"])
+        rows = list(csv.reader(io.StringIO(response.data.decode("utf-8"))))
+        self.assertEqual(len(rows), 3)
 
     def test_patient_display_name_is_independent_of_clinical_record_name(self):
         self.sign_in("patient")
@@ -319,11 +380,18 @@ class UIRequirementTests(unittest.TestCase):
         self.add_measurement(0, 120, 80)
         self.sign_in("doctor")
 
-        response = self.client.get("/doctor/patients")
+        legacy_page = self.client.get("/doctor/patients")
+        self.assertEqual(legacy_page.status_code, 302)
+        self.assertEqual(legacy_page.headers["Location"], "/doctor/#patients")
+        response = self.client.get("/doctor/")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Patient One", response.data)
         self.assertIn(b"Good", response.data)
+        navigation = response.data.split(
+            b'<nav class="bottom-navigation"', 1
+        )[1].split(b"</nav>", 1)[0]
+        self.assertNotIn(b">Patients<", navigation)
 
     def test_doctor_alerts_are_ordered_by_severity_then_oldest_unread(self):
         names = ("Lower severity older", "Higher newer", "Higher older")

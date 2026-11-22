@@ -2,6 +2,12 @@ def list_patients(database, doctor_id, search=""):
     statement = """
         SELECT p.id, p.display_name, p.profile_status, p.risk_score,
                p.created_at, COUNT(a.id) AS new_alert_count,
+               EXISTS (
+                   SELECT 1 FROM messages AS m
+                   WHERE m.patient_profile_id = p.id
+                     AND m.sender_user_id != p.doctor_id
+                     AND m.read_at IS NULL
+               ) AS has_unread_messages,
                COALESCE((
                    SELECT m.grade
                    FROM measurements AS m
@@ -55,6 +61,12 @@ def list_unacknowledged_alerts(database, doctor_id):
         SELECT a.id, a.grade, a.reason,
                strftime('%Y-%m-%dT%H:%M:%SZ', a.created_at) AS created_at,
                p.id AS patient_id, p.display_name AS patient_name,
+               EXISTS (
+                   SELECT 1 FROM messages AS unread
+                   WHERE unread.patient_profile_id = p.id
+                     AND unread.sender_user_id != p.doctor_id
+                     AND unread.read_at IS NULL
+               ) AS has_unread_messages,
                m.grade AS measurement_grade, m.status AS measurement_status,
                CASE WHEN a.reason = 'measurement_confirmation_alert'
                     THEN c.systolic ELSE i.systolic

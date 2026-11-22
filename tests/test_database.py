@@ -33,10 +33,16 @@ class DatabaseSchemaTests(unittest.TestCase):
                     row[1]
                     for row in connection.execute("PRAGMA table_info(users)")
                 }
+                message_columns = {
+                    row[1]
+                    for row in connection.execute(
+                        "PRAGMA table_info(messages)"
+                    )
+                }
             finally:
                 connection.close()
 
-            self.assertEqual(version, 3)
+            self.assertEqual(version, 4)
             self.assertTrue(
                 {
                     "users",
@@ -54,6 +60,7 @@ class DatabaseSchemaTests(unittest.TestCase):
             )
             self.assertIn("theme_preference", columns)
             self.assertIn("display_name", columns)
+            self.assertIn("read_at", message_columns)
 
     def test_first_database_access_migrates_version_one_without_data_loss(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -91,7 +98,7 @@ class DatabaseSchemaTests(unittest.TestCase):
                     "SELECT email, theme_preference, display_name FROM users WHERE id = 1"
                 ).fetchone()
 
-            self.assertEqual(version, 3)
+            self.assertEqual(version, 4)
             self.assertEqual(
                 (user["email"], user["theme_preference"], user["display_name"]),
                 ("patient@example.test", "light", "patient"),
@@ -141,9 +148,44 @@ class DatabaseSchemaTests(unittest.TestCase):
                     """
                 ).fetchone()
 
-            self.assertEqual(version, 3)
+            self.assertEqual(version, 4)
             self.assertEqual(user["display_name"], "doctor")
             self.assertIsNotNone(message_table)
+
+    def test_version_three_migration_marks_existing_messages_as_read(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = Path(temp_dir) / "version-three.sqlite3"
+            connection = sqlite3.connect(database_path)
+            connection.executescript(
+                """
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY,
+                    patient_profile_id INTEGER NOT NULL,
+                    sender_user_id INTEGER NOT NULL,
+                    body TEXT NOT NULL,
+                    sent_at TEXT NOT NULL
+                );
+                INSERT INTO messages
+                    (patient_profile_id, sender_user_id, body, sent_at)
+                VALUES (1, 2, 'Existing message', '2026-01-01T12:00:00Z');
+                PRAGMA user_version = 3;
+                """
+            )
+            connection.commit()
+            connection.close()
+
+            app = create_app(
+                {"TESTING": True, "DATABASE": str(database_path)}
+            )
+            with app.app_context():
+                database = get_db()
+                version = database.execute("PRAGMA user_version").fetchone()[0]
+                message = database.execute(
+                    "SELECT read_at FROM messages WHERE id = 1"
+                ).fetchone()
+
+            self.assertEqual(version, 4)
+            self.assertEqual(message["read_at"], "2026-01-01T12:00:00Z")
 
     def test_flask_cli_initializes_database_schema(self):
         with tempfile.TemporaryDirectory() as temp_dir:

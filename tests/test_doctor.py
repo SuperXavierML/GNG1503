@@ -269,6 +269,9 @@ class DoctorWorkflowTests(unittest.TestCase):
         self.assertIn(b"id=\"blood-pressure-chart\"", response.data)
         self.assertIn(b"id=\"symptom-chart\"", response.data)
         self.assertIn(b'data-utc-time="', response.data)
+        self.assertIn(b"Standard deviation (% of mean)", response.data)
+        self.assertIn(b"Mean change vs previous period", response.data)
+        self.assertNotIn(b'class="role-card p-3 h-100"', response.data)
         self.assertIn(b"30 days", response.data)
         self.assertNotIn(b"1 month", response.data)
         self.assertNotIn(b"6 months", response.data)
@@ -316,6 +319,12 @@ class DoctorWorkflowTests(unittest.TestCase):
             database.commit()
         self.assertEqual(
             self.client.get(f"/doctor/patients/{patient_id}").status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(
+                f"/doctor/patients/{patient_id}/history.csv"
+            ).status_code,
             404,
         )
 

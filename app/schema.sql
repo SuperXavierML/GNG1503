@@ -129,7 +129,8 @@ CREATE TABLE messages (
         REFERENCES patient_profiles(id) ON DELETE CASCADE,
     sender_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     body TEXT NOT NULL CHECK (length(trim(body)) > 0),
-    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    sent_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    read_at TEXT
 );
 
 CREATE INDEX idx_patient_profiles_doctor
@@ -146,3 +147,5 @@ CREATE INDEX idx_patient_invites_code_expiry
     ON patient_invites(code_hash, expires_at, consumed_at);
 CREATE INDEX idx_messages_patient_time
     ON messages(patient_profile_id, sent_at, id);
+CREATE INDEX idx_messages_unread
+    ON messages(patient_profile_id, sender_user_id, read_at);

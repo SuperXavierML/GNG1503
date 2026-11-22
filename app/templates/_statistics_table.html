@@ -1,0 +1,49 @@
+{% macro stat_bars(summary, metric, t) %}
+  <div class="stat-bars" role="img" aria-label="{{ t('current_period') }} {{ summary['graphs'][metric]['current'] }}%, {{ t('previous_period') }} {{ summary['graphs'][metric]['previous'] }}%">
+    <span class="stat-bar-label">{{ t('current_period') }}</span>
+    <span class="stat-bar-track"><span class="stat-bar-current" style="width: {{ summary['graphs'][metric]['current'] }}%"></span></span>
+    <span class="stat-bar-label">{{ t('previous_period') }}</span>
+    <span class="stat-bar-track"><span class="stat-bar-previous" style="width: {{ summary['graphs'][metric]['previous'] }}%"></span></span>
+  </div>
+{% endmacro %}
+
+{% macro statistics_table(analysis, t) %}
+  <div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+      <caption>{{ t('statistics') }}</caption>
+      <thead>
+        <tr>
+          <th scope="col">{{ t('measurement_metric') }}</th>
+          <th scope="col">{{ t('mean') }}</th>
+          <th scope="col">{{ t('minimum') }}</th>
+          <th scope="col">{{ t('maximum') }}</th>
+          <th scope="col">{{ t('standard_deviation') }}</th>
+          <th scope="col">{{ t('standard_deviation_percent') }}</th>
+          <th scope="col">{{ t('mean_variation_percent') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for key, label, unit in [('systolic', 'systolic', 'mmHg'), ('diastolic', 'diastolic', 'mmHg'), ('pulse', 'pulse', 'bpm')] %}
+          {% set stat = analysis.statistics[key] %}
+          <tr>
+            <th scope="row">{{ t(label) }}</th>
+            <td>{{ stat['mean'] if stat['mean'] is not none else '-' }}{% if stat['mean'] is not none %} {{ unit }}{% endif %}{{ stat_bars(stat, 'mean', t) }}</td>
+            <td>{{ stat['minimum'] if stat['minimum'] is not none else '-' }}{% if stat['minimum'] is not none %} {{ unit }}{% endif %}</td>
+            <td>{{ stat['maximum'] if stat['maximum'] is not none else '-' }}{% if stat['maximum'] is not none %} {{ unit }}{% endif %}</td>
+            <td>{{ stat['standard_deviation'] if stat['standard_deviation'] is not none else '-' }}{% if stat['standard_deviation'] is not none %} {{ unit }}{% endif %}{{ stat_bars(stat, 'standard_deviation', t) }}</td>
+            <td>{{ stat['standard_deviation_percent'] if stat['standard_deviation_percent'] is not none else '-' }}{% if stat['standard_deviation_percent'] is not none %}%{% endif %}{{ stat_bars(stat, 'standard_deviation_percent', t) }}</td>
+            <td>
+              {% if stat['mean_variation_percent'] is not none %}
+                {{ '%+.2f'|format(stat['mean_variation_percent']) }}%
+                <span class="small text-muted">({{ '%+.2f'|format(stat['mean_delta']) }} {{ unit }})</span>
+                {{ stat_bars(stat, 'mean_variation_percent', t) }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endmacro %}
