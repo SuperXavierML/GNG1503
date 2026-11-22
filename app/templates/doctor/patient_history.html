@@ -4,10 +4,29 @@
 
 {% block content %}
 <section class="container py-4">
+  {% set grade = patient['grade'] if patient['grade'] is not none else 0 %}
+  {% if grade == 0 %}
+    {% set health_label = 'health_good' %}
+    {% set health_class = 'btn-success' %}
+  {% elif grade == 1 %}
+    {% set health_label = 'health_high' %}
+    {% set health_class = 'btn-warning' %}
+  {% elif grade == 2 %}
+    {% set health_label = 'health_elevated' %}
+    {% set health_class = 'status-orange' %}
+  {% else %}
+    {% set health_label = 'health_critical' %}
+    {% set health_class = 'btn-danger' %}
+  {% endif %}
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
     <div>
       <a href="{{ url_for('doctor.patients') }}">{{ t('patients') }}</a>
-      <h1 class="h2 mt-2 mb-0">{{ patient['display_name'] }}</h1>
+      <h1 class="h2 mt-2 mb-0">
+        {{ patient['display_name'] }}
+        <span class="btn btn-sm status-badge {{ health_class }}" role="status">
+          {{ t(health_label) }}{% if grade %} - {{ t('grade') }} {{ grade }}{% endif %}
+        </span>
+      </h1>
       {% if patient['systolic_threshold'] %}
         <p class="text-muted mt-2 mb-0">{{ t('threshold') }}: {{ patient['systolic_threshold'] }}/{{ patient['diastolic_threshold'] }} mmHg</p>
       {% endif %}
@@ -25,21 +44,28 @@
 
   {% if issued_access_code %}
     <div class="alert alert-warning" role="status">
-      {{ t('code_ready') }} <code>{{ issued_access_code }}</code>
-      <a href="{{ url_for('patient_link.link_account') }}">{{ t('link_patient') }}</a>
+      {{ t('code_ready') }}
+      <code id="issued-access-code">{{ issued_access_code }}</code>
+      <button
+        class="btn btn-outline-primary btn-sm ms-2"
+        id="copy-access-code"
+        type="button"
+        data-access-code="{{ issued_access_code }}"
+        data-copied-label="{{ t('code_copied') }}"
+        data-copy-error="{{ t('copy_failed') }}"
+      >{{ t('copy_code') }}</button>
+      <span class="ms-2" id="copy-access-code-status" role="status" aria-live="polite"></span>
+      <a class="ms-2" id="link-patient-after-copy" href="{{ url_for('patient_link.link_account') }}">{{ t('link_patient') }}</a>
     </div>
   {% elif patient['profile_status'] == 'pending_assessment' %}
-    <div class="alert alert-info">
-      <p>{{ t('assessment_pending') }}</p>
-      <a class="btn btn-primary" href="{{ url_for('doctor.assess_patient', patient_id=patient['id']) }}">{{ t('complete_assessment') }}</a>
-    </div>
+    <p class="alert alert-warning">{{ t('legacy_assessment_unavailable') }}</p>
   {% endif %}
 
   <form class="row g-2 align-items-end mb-4" method="get">
     <div class="col-sm-4 col-md-3">
       <label class="form-label" for="range">{{ t('timeframe') }}</label>
       <select class="form-select" id="range" name="range">
-        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('thirty_days', 'thirty_days'), ('month', 'month'), ('six_months', 'six_months')] %}
+        {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('thirty_days', 'thirty_days')] %}
           <option value="{{ key }}" {{ 'selected' if timeframe == key else '' }}>{{ t(label_key) }}</option>
         {% endfor %}
       </select>
@@ -103,7 +129,7 @@
         <label class="form-label" for="first">{{ t('first_measurement') }}</label>
         <select class="form-select" id="first" name="first" required>
           {% for measurement in comparison_measurements %}
-            <option value="{{ measurement.id }}" {{ 'selected' if measurement.id == selected_first_id else '' }}>{{ measurement.measured_at }}</option>
+            <option value="{{ measurement.id }}" data-utc-time="{{ measurement.measured_at }}" {{ 'selected' if measurement.id == selected_first_id else '' }}>{{ measurement.measured_at }}</option>
           {% endfor %}
         </select>
       </div>
@@ -111,7 +137,7 @@
         <label class="form-label" for="second">{{ t('second_measurement') }}</label>
         <select class="form-select" id="second" name="second" required>
           {% for measurement in comparison_measurements %}
-            <option value="{{ measurement.id }}" {{ 'selected' if measurement.id == selected_second_id else '' }}>{{ measurement.measured_at }}</option>
+            <option value="{{ measurement.id }}" data-utc-time="{{ measurement.measured_at }}" {{ 'selected' if measurement.id == selected_second_id else '' }}>{{ measurement.measured_at }}</option>
           {% endfor %}
         </select>
       </div>
@@ -133,8 +159,8 @@
           <thead>
             <tr>
               <th scope="col">{{ t('measurement_metric') }}</th>
-              <th scope="col">{{ t('earlier_reading') }}<br><small>{{ comparison[0].measured_at }}</small></th>
-              <th scope="col">{{ t('later_reading') }}<br><small>{{ comparison[1].measured_at }}</small></th>
+              <th scope="col">{{ t('earlier_reading') }}<br><small><time datetime="{{ comparison[0].measured_at }}" data-utc-time="{{ comparison[0].measured_at }}">{{ comparison[0].measured_at }}</time></small></th>
+              <th scope="col">{{ t('later_reading') }}<br><small><time datetime="{{ comparison[1].measured_at }}" data-utc-time="{{ comparison[1].measured_at }}">{{ comparison[1].measured_at }}</time></small></th>
               <th scope="col">{{ t('comparison_difference') }}</th>
             </tr>
           </thead>
@@ -172,7 +198,7 @@
       <ul class="list-group">
         {% for note in history.notes %}
           <li class="list-group-item">
-            <time class="small text-muted">{{ note.noted_at }}</time>
+            <time class="small text-muted" data-utc-time="{{ note.noted_at }}">{{ note.noted_at }}</time>
             <p class="mb-0">{{ note.note }}</p>
           </li>
         {% endfor %}

@@ -22,7 +22,7 @@ Classification of patients' critical thresholds and initial delays between blood
 
 ## 3. Data Entry & Measurement Logic
 1. **Patient Data Entry UI:** Interface allowing the patient to enter their symptoms, symptom intensity (from $0$ to $5$), and their blood pressure measurements (systolic, diastolic, and pulse).
-2. **Tracked Symptoms:** The following symptoms are tracked and are considered critical when their total value exceeds $5$:
+2. **Tracked Symptoms:** The following symptoms are tracked and are considered critical when their total value exceeds $8$:
    ```json
    {
      "headache": "malDeTete",
@@ -38,10 +38,10 @@ Classification of patients' critical thresholds and initial delays between blood
 3. **Delay Calculation & Hypertension Grade Determination:** During calculation, the following values are verified:
    1. **Pulse pressure:** Must be between $20$ and $60\text{ mmHg}$.
    2. **Blood pressure:** Systolic and diastolic pressures must be below the patient's critical threshold.
-   3. **Symptom score:** The sum of symptom intensity values must be below the critical value ($5$).
-   4. **Doctor Alerts:** If there are two consecutive concerning values and a confirmation of these (or two confirmations in certain cases), an alert is sent to the doctor.
-   5. **Resetting Delay:** After three normal readings, the delay returns to its initial value ($24\text{ hours}$), even if the patient has symptoms, provided those symptoms remain below the tolerated critical value.
-   6. **Immediate Verification:** An immediate verification measurement is triggered if the hypertension grade changes compared to the previous reading. This verification only includes measurable vital signs (no re-entry of symptoms).
+   3. **Symptom score:** The sum of symptom intensity values must not exceed the critical value ($8$).
+   4. **Doctor Alerts:** The first non-normal measurement, including an abnormal first reading, creates an alert immediately. The alert is updated with the confirmation result rather than duplicated for the same measurement.
+   5. **Resetting Delay:** After three normal readings, the delay returns to its initial value ($24\text{ hours}$), even if the patient has symptoms, provided those symptoms remain at or below the tolerated critical value.
+   6. **Immediate Verification:** An immediate, mandatory verification measurement is triggered if the hypertension grade changes compared to the previous reading. The first reading is compared with an assumed Grade 0. Verification only includes measurable vital signs (no re-entry of symptoms), and the patient must complete it before continuing.
    7. **Standard Measurement:** During a regular measurement session, both blood pressure readings and symptoms are recorded.
    8. **Delay Calculation Formula:** The delay is calculated using the following logic, where `points` is determined by the equation $\text{pointsInquietude} = 0.5 \times \sum(\text{symptomes.values()})$, with `symptomes.values()` representing the sum of intensities associated with each symptom:
       ```python

@@ -50,7 +50,7 @@ def classify_grade(systolic, diastolic, patient, symptom_total=0):
         systolic >= patient["systolic_threshold"]
         or diastolic >= patient["diastolic_threshold"]
         or not 20 <= pulse_pressure <= 60
-        or symptom_total > 5
+        or symptom_total > 8
     ):
         return 1
     return 0
@@ -103,6 +103,43 @@ def _timestamp():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _update_measurement_alert(
+    database, patient_id, measurement_id, grade, measured_at, confirmed=False
+):
+    existing = database.execute(
+        "SELECT id, grade FROM alerts WHERE measurement_id = ?",
+        (measurement_id,),
+    ).fetchone()
+    if existing is not None:
+        database.execute(
+            """
+            UPDATE alerts
+            SET grade = ?, reason = ?, acknowledged_at = NULL
+            WHERE id = ?
+            """,
+            (
+                max(existing["grade"], grade),
+                "measurement_alert_confirmed",
+                existing["id"],
+            ),
+        )
+    elif grade > 0:
+        database.execute(
+            """
+            INSERT INTO alerts
+                (patient_profile_id, measurement_id, grade, reason, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                patient_id,
+                measurement_id,
+                grade,
+                "measurement_confirmation_alert" if confirmed else "measurement_alert",
+                measured_at,
+            ),
+        )
+
+
 def record_measurement(database, patient, systolic, diastolic, pulse, symptoms):
     symptom_total = sum(symptoms.values())
     with database:
@@ -121,7 +158,7 @@ def record_measurement(database, patient, systolic, diastolic, pulse, symptoms):
         grade = classify_grade(systolic, diastolic, patient, symptom_total)
         status = (
             "pending_confirmation"
-            if latest is not None and latest["grade"] != grade
+            if (latest["grade"] if latest is not None else 0) != grade
             else "recorded"
         )
         delay = _next_delay(database, patient["id"], grade, symptom_total)
@@ -152,6 +189,13 @@ def record_measurement(database, patient, systolic, diastolic, pulse, symptoms):
                 (measurement_id, key, symptoms[key])
                 for key in SYMPTOM_KEYS
             ],
+        )
+        _update_measurement_alert(
+            database,
+            patient["id"],
+            measurement_id,
+            grade,
+            measured_at,
         )
     return {
         "id": measurement_id,
@@ -213,6 +257,14 @@ def record_confirmation(
             VALUES (?, 'confirmation', ?, ?, ?, ?)
             """,
             (measurement_id, systolic, diastolic, pulse, measured_at),
+        )
+        _update_measurement_alert(
+            database,
+            patient["id"],
+            measurement_id,
+            grade,
+            measured_at,
+            confirmed=True,
         )
     return {
         "id": measurement_id,

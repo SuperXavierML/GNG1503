@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from app.database import get_db, initialize_database
-from app.services.patient_history import get_patient_analysis
+from app.services.patient_history import get_measurement_log, get_patient_analysis
 
 
 class UIRequirementTests(unittest.TestCase):
@@ -99,7 +99,7 @@ class UIRequirementTests(unittest.TestCase):
         return measured_at
 
     def test_patient_history_has_only_log_and_downloads_all_rows_as_csv(self):
-        self.add_measurement(1, 120, 80)
+        measured_at = self.add_measurement(1, 120, 80)
         self.add_measurement(2, 140, 95)
         self.sign_in("patient")
 
@@ -110,6 +110,10 @@ class UIRequirementTests(unittest.TestCase):
         self.assertIn(b"Not valid", page.data)
         self.assertNotIn(b"blood-pressure-chart", page.data)
         self.assertNotIn(b"Compare measurements", page.data)
+        self.assertIn(
+            f'data-utc-time="{measured_at}"'.encode("utf-8"),
+            page.data,
+        )
 
         response = self.client.get("/patient/history.csv")
         self.assertEqual(response.status_code, 200)
@@ -119,6 +123,20 @@ class UIRequirementTests(unittest.TestCase):
         self.assertEqual(len(rows), 3)
         self.assertIn("yes", [row[4] for row in rows])
         self.assertIn("no", [row[4] for row in rows])
+
+    def test_dashboard_omits_pulse_pressure_notice_and_keeps_timestamp(self):
+        measured_at = self.add_measurement(0, 130, 65)
+        self.sign_in("patient")
+
+        response = self.client.get("/patient/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            f'data-utc-time="{measured_at}"'.encode("utf-8"),
+            response.data,
+        )
+        self.assertNotIn(b"pulse_pressure_review", response.data)
+        self.assertNotIn(b"outside the 20 to 60 mmHg range", response.data)
 
     def test_analysis_computes_population_statistics_and_previous_period_change(self):
         self.add_measurement(1, 120, 80, 60)
@@ -146,6 +164,55 @@ class UIRequirementTests(unittest.TestCase):
         self.assertIn(b"30 days", response.data)
         self.assertIn(b"Mean change vs previous period", response.data)
         self.assertIn(b"stat-bars", response.data)
+        self.assertNotIn(b"1 month", response.data)
+        self.assertNotIn(b"6 months", response.data)
+
+    def test_history_validity_uses_all_normal_measurement_rules(self):
+        timestamps = {
+            "normal": self.add_measurement(1, 120, 80),
+            "pulse_pressure": self.add_measurement(2, 120, 59),
+            "symptom_eight": self.add_measurement(3, 120, 80),
+            "symptom_nine": self.add_measurement(4, 120, 80),
+            "pending": self.add_measurement(5, 120, 80),
+        }
+        with self.app.app_context():
+            database = get_db()
+            for name in ("symptom_eight", "symptom_nine"):
+                measurement_id = database.execute(
+                    "SELECT id FROM measurements WHERE measured_at = ?",
+                    (timestamps[name],),
+                ).fetchone()["id"]
+                symptom_total = 8 if name == "symptom_eight" else 9
+                database.executemany(
+                    """
+                    INSERT INTO symptom_entries
+                        (measurement_id, symptom_key, intensity)
+                    VALUES (?, ?, ?)
+                    """,
+                    (
+                        (measurement_id, "malDeTete", 5),
+                        (measurement_id, "vertige", symptom_total - 5),
+                    ),
+                )
+            database.execute(
+                "UPDATE measurements SET status = 'pending_confirmation' WHERE measured_at = ?",
+                (timestamps["pending"],),
+            )
+            database.commit()
+            profile = database.execute(
+                "SELECT * FROM patient_profiles WHERE id = ?",
+                (self.patient_id,),
+            ).fetchone()
+            validity = {
+                row["measured_at"]: row["valid"]
+                for row in get_measurement_log(database, profile)
+            }
+
+        self.assertTrue(validity[timestamps["normal"]])
+        self.assertFalse(validity[timestamps["pulse_pressure"]])
+        self.assertTrue(validity[timestamps["symptom_eight"]])
+        self.assertFalse(validity[timestamps["symptom_nine"]])
+        self.assertFalse(validity[timestamps["pending"]])
 
     def test_patient_and_doctor_can_exchange_messages_and_search_patients(self):
         self.sign_in("patient")
@@ -225,6 +292,10 @@ class UIRequirementTests(unittest.TestCase):
     def test_symptom_selection_uses_local_icons_and_descriptive_intensities(self):
         self.sign_in("patient")
         response = self.client.get("/patient/measurements/new")
+        self.assertRegex(
+            response.data.decode("utf-8"),
+            r'<option value="0" selected>0 - Not present</option>',
+        )
         self.assertIn(b"1 - Very mild", response.data)
         self.assertIn(b"5 - Very severe", response.data)
         for icon in (
@@ -243,6 +314,16 @@ class UIRequirementTests(unittest.TestCase):
                 self.assertEqual(asset.status_code, 200)
             finally:
                 asset.close()
+
+    def test_doctor_patient_list_shows_the_current_health_grade(self):
+        self.add_measurement(0, 120, 80)
+        self.sign_in("doctor")
+
+        response = self.client.get("/doctor/patients")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Patient One", response.data)
+        self.assertIn(b"Good", response.data)
 
     def test_doctor_alerts_are_ordered_by_severity_then_oldest_unread(self):
         names = ("Lower severity older", "Higher newer", "Higher older")

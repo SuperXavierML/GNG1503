@@ -41,6 +41,28 @@ from app.translations import translate
 patient = Blueprint("patient", __name__, url_prefix="/patient")
 
 
+@patient.before_request
+def require_pending_confirmation():
+    if session.get("user_role") != "patient":
+        return None
+
+    profile = get_linked_patient(get_db(), session["user_id"])
+    if profile is None:
+        return None
+    latest = get_latest_measurement(get_db(), profile["id"])
+    if latest is None or latest["status"] != "pending_confirmation":
+        return None
+    if (
+        request.endpoint == "patient.confirm_measurement"
+        and request.view_args
+        and request.view_args.get("measurement_id") == latest["id"]
+    ):
+        return None
+    return redirect(
+        url_for("patient.confirm_measurement", measurement_id=latest["id"])
+    )
+
+
 def _current_patient():
     profile = get_linked_patient(get_db(), session["user_id"])
     if profile is None:
@@ -58,7 +80,9 @@ def _parse_utc(value):
 
 def _next_due_at(patient_profile, latest):
     if latest is not None:
-        base = _parse_utc(latest["measured_at"])
+        base = _parse_utc(
+            latest["next_due_base"] or latest["measured_at"]
+        )
         delay = latest["next_delay_seconds"] or patient_profile[
             "initial_delay_seconds"
         ]

@@ -18,6 +18,17 @@ def protect_csrf():
             abort(400)
 
 
+def establish_user_session(user):
+    session.clear()
+    session["user_id"] = user["id"]
+    session["user_role"] = user["role"]
+    session["display_name"] = (
+        user["display_name"] or user["email"].split("@", 1)[0]
+    )
+    session["language"] = user["preferred_language"]
+    session["theme"] = user["theme_preference"]
+
+
 def doctor_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):

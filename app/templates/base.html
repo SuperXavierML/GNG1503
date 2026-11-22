@@ -64,7 +64,7 @@
       <nav class="bottom-navigation" aria-label="{{ t('navigation') }}">
         <div class="container bottom-navigation-items">
           <a class="bottom-navigation-link" href="{{ url_for('doctor.dashboard') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.dashboard' else 'false' }}">{{ t('home') }}</a>
-          <a class="bottom-navigation-link" href="{{ url_for('doctor.patients') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.patients', 'doctor.patient_history', 'doctor.assess_patient', 'doctor.new_patient', 'doctor.add_patient_note', 'doctor.create_access_code') else 'false' }}">{{ t('patients') }}</a>
+          <a class="bottom-navigation-link" href="{{ url_for('doctor.patients') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.patients', 'doctor.patient_history', 'doctor.new_patient', 'doctor.add_patient_note', 'doctor.create_access_code') else 'false' }}">{{ t('patients') }}</a>
           <a class="bottom-navigation-link" href="{{ url_for('doctor.messages') }}" aria-current="{{ 'page' if request.endpoint in ('doctor.messages', 'doctor.patient_messages') else 'false' }}">{{ t('messages') }}</a>
           <a class="bottom-navigation-link" href="{{ url_for('doctor.settings') }}" aria-current="{{ 'page' if request.endpoint == 'doctor.settings' else 'false' }}">{{ t('settings') }}</a>
         </div>
@@ -75,6 +75,7 @@
         <p class="mb-0">{{ t('footer_care') }}</p>
       </div>
     </footer>
+    <script src="{{ url_for('static', filename='js/local_time.js') }}" defer></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

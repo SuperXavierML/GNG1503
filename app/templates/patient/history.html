@@ -24,7 +24,7 @@
         <tbody>
           {% for measurement in measurements %}
             <tr>
-              <td>{{ measurement['measured_at'] }}</td>
+              <td><time datetime="{{ measurement['measured_at'] }}" data-utc-time="{{ measurement['measured_at'] }}">{{ measurement['measured_at'] }}</time></td>
               <td>{{ measurement['systolic'] }} mmHg</td>
               <td>{{ measurement['diastolic'] }} mmHg</td>
               <td>{{ measurement['pulse'] }} bpm</td>

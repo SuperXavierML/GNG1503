@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -109,6 +110,8 @@ class PatientWorkflowTests(unittest.TestCase):
         _, patient_id, response = self.link_patient()
         self.assertIn(b"Your account is linked", response.data)
         self.assertIn(b"measurement-countdown", response.data)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["user_role"], "patient")
 
         self.client.get("/patient/measurements/new")
         first = self.client.post(
@@ -173,20 +176,151 @@ class PatientWorkflowTests(unittest.TestCase):
                 "SELECT status, next_delay_seconds FROM measurements WHERE id = ?",
                 (pending["id"],),
             ).fetchone()
+            confirmation_time = database.execute(
+                """
+                SELECT measured_at FROM vital_readings
+                WHERE measurement_id = ? AND reading_kind = 'confirmation'
+                """,
+                (pending["id"],),
+            ).fetchone()["measured_at"]
         self.assertEqual(readings, 3)
         self.assertEqual(symptoms, 16)
         self.assertEqual(finalized["status"], "recorded")
         self.assertEqual(finalized["next_delay_seconds"], 12 * 60 * 60)
+        expected_due = (
+            datetime.strptime(confirmation_time, "%Y-%m-%dT%H:%M:%SZ")
+            + timedelta(seconds=finalized["next_delay_seconds"])
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+        dashboard = self.client.get("/patient/")
+        self.assertIn(
+            f'data-due-at="{expected_due}"'.encode("utf-8"),
+            dashboard.data,
+        )
 
         history = self.client.get("/patient/history")
         self.assertEqual(history.status_code, 200)
         self.assertIn(b"All previous measurements", history.data)
         self.assertIn(b"Not valid", history.data)
         self.assertNotIn(b"id=\"blood-pressure-chart\"", history.data)
-        analysis = self.client.get("/patient/analysis?range=month")
+        analysis = self.client.get("/patient/analysis?range=thirty_days")
         self.assertEqual(analysis.status_code, 200)
         self.assertIn(b"id=\"blood-pressure-chart\"", analysis.data)
         self.assertIn(b"id=\"symptom-chart\"", analysis.data)
+
+    def test_first_abnormal_reading_alert_is_updated_after_confirmation(self):
+        doctor_id, patient_id, _ = self.link_patient()
+        response = self.client.post(
+            "/patient/measurements/new",
+            data={
+                "csrf_token": self.csrf_token(),
+                **self.measurement_form(145, 95),
+            },
+            follow_redirects=True,
+        )
+        self.assertIn(b"Confirm reading", response.data)
+        self.assertIn(b'role="dialog" aria-modal="true"', response.data)
+        blocked_page = self.client.get("/patient/settings")
+        self.assertIn("/patient/measurements/", blocked_page.headers["Location"])
+        self.assertIn("/confirm", blocked_page.headers["Location"])
+
+        with self.app.app_context():
+            database = get_db()
+            alert = database.execute(
+                """
+                SELECT id, measurement_id, grade, reason
+                FROM alerts WHERE patient_profile_id = ?
+                """,
+                (patient_id,),
+            ).fetchone()
+            patient_user_id = database.execute(
+                "SELECT patient_user_id FROM patient_profiles WHERE id = ?",
+                (patient_id,),
+            ).fetchone()["patient_user_id"]
+        self.assertEqual(alert["grade"], 1)
+        self.assertEqual(alert["reason"], "measurement_alert")
+        self.assertIsNotNone(alert["measurement_id"])
+
+        with self.client.session_transaction() as session:
+            session["user_id"] = doctor_id
+            session["user_role"] = "doctor"
+            session["display_name"] = "Doctor"
+            session["language"] = "en"
+            session["theme"] = "light"
+        dashboard = self.client.get("/doctor/")
+        self.assertIn(b"145/95 mmHg", dashboard.data)
+        self.assertIn(
+            f'href="/doctor/patients/{patient_id}"'.encode("utf-8"),
+            dashboard.data,
+        )
+        self.client.post(
+            f"/doctor/alerts/{alert['id']}/acknowledge",
+            data={"csrf_token": self.csrf_token()},
+        )
+
+        with self.client.session_transaction() as session:
+            session["user_id"] = patient_user_id
+            session["user_role"] = "patient"
+            session["display_name"] = "Patient One"
+            session["language"] = "en"
+            session["theme"] = "light"
+        confirmation = self.client.post(
+            f"/patient/measurements/{alert['measurement_id']}/confirm",
+            data={
+                "csrf_token": self.csrf_token(),
+                "systolic": "185",
+                "diastolic": "110",
+                "pulse": "74",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(confirmation.status_code, 200)
+
+        with self.app.app_context():
+            database = get_db()
+            updated_alert = database.execute(
+                """
+                SELECT grade, reason, acknowledged_at
+                FROM alerts WHERE id = ?
+                """,
+                (alert["id"],),
+            ).fetchone()
+            alert_count = database.execute(
+                "SELECT COUNT(*) FROM alerts WHERE patient_profile_id = ?",
+                (patient_id,),
+            ).fetchone()[0]
+        self.assertEqual(alert_count, 1)
+        self.assertEqual(updated_alert["grade"], 3)
+        self.assertEqual(updated_alert["reason"], "measurement_alert_confirmed")
+        self.assertIsNone(updated_alert["acknowledged_at"])
+
+        with self.client.session_transaction() as session:
+            session["user_id"] = doctor_id
+            session["user_role"] = "doctor"
+            session["display_name"] = "Doctor"
+        dashboard = self.client.get("/doctor/")
+        self.assertIn(b"185/110 mmHg", dashboard.data)
+        self.assertIn(b"Confirmation reading", dashboard.data)
+        self.assertIn(b"Next measurement", dashboard.data)
+
+    def test_measurement_vital_fields_align_in_both_languages(self):
+        self.link_patient()
+
+        for language, labels in (
+            ("en", (b"Systolic", b"Diastolic", b"Pulse")),
+            ("fr", (b"Systolique", b"Diastolique", b"Pouls")),
+        ):
+            with self.client.session_transaction() as session:
+                session["language"] = language
+
+            response = self.client.get("/patient/measurements/new")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.data.count(b"measurement-vital-field"),
+                3,
+            )
+            for label in labels:
+                self.assertIn(label, response.data)
 
     def test_patient_settings_save_language_and_theme(self):
         _, _, response = self.link_patient()

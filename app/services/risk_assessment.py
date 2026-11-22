@@ -111,6 +111,122 @@ def calculate_risk_result(answers):
     }
 
 
+def parse_threshold_overrides(form):
+    systolic_value = form.get("systolic_threshold_override", "").strip()
+    diastolic_value = form.get("diastolic_threshold_override", "").strip()
+    if not systolic_value and not diastolic_value:
+        return None
+    if not systolic_value or not diastolic_value:
+        raise ValueError("Both pressure thresholds must be provided together.")
+    try:
+        systolic = int(systolic_value)
+        diastolic = int(diastolic_value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Pressure thresholds must be whole numbers.") from error
+    if systolic <= diastolic or diastolic <= 0:
+        raise ValueError("Pressure thresholds must be positive and ordered.")
+    return systolic, diastolic
+
+
+def _serialize_answers(answers):
+    if not isinstance(answers, dict) or not answers:
+        raise ValueError("At least one questionnaire answer is required.")
+    serialized_answers = []
+    for question_key, answer in answers.items():
+        if not isinstance(question_key, str) or not question_key.strip():
+            raise ValueError("Question keys must be non-empty strings.")
+        try:
+            answer_value = json.dumps(answer, ensure_ascii=False, allow_nan=False)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Question answers must be JSON serializable.") from error
+        serialized_answers.append((question_key.strip(), answer_value))
+    return serialized_answers
+
+
+def create_patient_profile(
+    database, doctor_id, display_name, risk_result, threshold_override=None
+):
+    display_name = display_name.strip() if isinstance(display_name, str) else ""
+    if not display_name or len(display_name) > 100:
+        raise ValueError("A patient name of 1 to 100 characters is required.")
+    if not isinstance(risk_result, dict):
+        raise ValueError("The calculated risk result is invalid.")
+
+    answers = risk_result.get("answers")
+    serialized_answers = _serialize_answers(answers)
+    risk_score = risk_result.get("risk_score")
+    calculated_systolic = risk_result.get("systolic_threshold")
+    calculated_diastolic = risk_result.get("diastolic_threshold")
+    if (
+        type(risk_score) not in (int, float)
+        or not math.isfinite(risk_score)
+        or type(calculated_systolic) is not int
+        or type(calculated_diastolic) is not int
+        or not 125 <= calculated_systolic <= 140
+        or not 75 <= calculated_diastolic <= 90
+    ):
+        raise ValueError("The calculated risk result is invalid.")
+
+    if threshold_override is None:
+        systolic_threshold = calculated_systolic
+        diastolic_threshold = calculated_diastolic
+    else:
+        systolic_threshold, diastolic_threshold = threshold_override
+        if (
+            type(systolic_threshold) is not int
+            or type(diastolic_threshold) is not int
+            or systolic_threshold <= diastolic_threshold
+            or diastolic_threshold <= 0
+        ):
+            raise ValueError("The pressure threshold override is invalid.")
+
+    with database:
+        database.execute("BEGIN IMMEDIATE")
+        patient = database.execute(
+            """
+            INSERT INTO patient_profiles
+                (doctor_id, display_name, profile_status, risk_score,
+                 systolic_threshold, diastolic_threshold, initial_delay_seconds)
+            VALUES (?, ?, 'ready', ?, ?, ?, ?)
+            """,
+            (
+                doctor_id,
+                display_name,
+                risk_score,
+                systolic_threshold,
+                diastolic_threshold,
+                INITIAL_DELAY_SECONDS,
+            ),
+        )
+        patient_id = patient.lastrowid
+        assessment = database.execute(
+            """
+            INSERT INTO risk_assessments
+                (patient_profile_id, questionnaire_version, risk_score,
+                 systolic_threshold, diastolic_threshold)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                patient_id,
+                QUESTIONNAIRE_VERSION,
+                risk_score,
+                systolic_threshold,
+                diastolic_threshold,
+            ),
+        )
+        database.executemany(
+            """
+            INSERT INTO risk_answers (assessment_id, question_key, answer_value)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (assessment.lastrowid, question_key, answer_value)
+                for question_key, answer_value in serialized_answers
+            ],
+        )
+    return patient_id
+
+
 def save_risk_assessment(
     database,
     doctor_id,
@@ -135,15 +251,7 @@ def save_risk_assessment(
     ):
         raise ValueError("The calculated risk result is invalid.")
 
-    serialized_answers = []
-    for question_key, answer in answers.items():
-        if not isinstance(question_key, str) or not question_key.strip():
-            raise ValueError("Question keys must be non-empty strings.")
-        try:
-            answer_value = json.dumps(answer, ensure_ascii=False, allow_nan=False)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Question answers must be JSON serializable.") from error
-        serialized_answers.append((question_key.strip(), answer_value))
+    serialized_answers = _serialize_answers(answers)
 
     owned_profile = database.execute(
         "SELECT id FROM patient_profiles WHERE id = ? AND doctor_id = ?",

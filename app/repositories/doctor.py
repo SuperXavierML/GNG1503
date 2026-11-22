@@ -1,7 +1,14 @@
 def list_patients(database, doctor_id, search=""):
     statement = """
         SELECT p.id, p.display_name, p.profile_status, p.risk_score,
-               p.created_at, COUNT(a.id) AS new_alert_count
+               p.created_at, COUNT(a.id) AS new_alert_count,
+               COALESCE((
+                   SELECT m.grade
+                   FROM measurements AS m
+                   WHERE m.patient_profile_id = p.id
+                   ORDER BY m.measured_at DESC, m.id DESC
+                   LIMIT 1
+               ), 0) AS grade
         FROM patient_profiles AS p
         LEFT JOIN alerts AS a
             ON a.patient_profile_id = p.id AND a.acknowledged_at IS NULL
@@ -27,7 +34,14 @@ def get_patient(database, doctor_id, patient_id):
         """
         SELECT id, display_name, profile_status, risk_score,
                systolic_threshold, diastolic_threshold,
-               initial_delay_seconds
+               initial_delay_seconds,
+               COALESCE((
+                   SELECT m.grade
+                   FROM measurements AS m
+                   WHERE m.patient_profile_id = patient_profiles.id
+                   ORDER BY m.measured_at DESC, m.id DESC
+                   LIMIT 1
+               ), 0) AS grade
         FROM patient_profiles
         WHERE id = ? AND doctor_id = ?
         """,
@@ -38,12 +52,39 @@ def get_patient(database, doctor_id, patient_id):
 def list_unacknowledged_alerts(database, doctor_id):
     return database.execute(
         """
-        SELECT a.id, a.grade, a.reason, a.created_at,
-               p.id AS patient_id, p.display_name AS patient_name
+        SELECT a.id, a.grade, a.reason,
+               strftime('%Y-%m-%dT%H:%M:%SZ', a.created_at) AS created_at,
+               p.id AS patient_id, p.display_name AS patient_name,
+               m.grade AS measurement_grade, m.status AS measurement_status,
+               CASE WHEN a.reason = 'measurement_confirmation_alert'
+                    THEN c.systolic ELSE i.systolic
+               END AS triggering_systolic,
+               CASE WHEN a.reason = 'measurement_confirmation_alert'
+                    THEN c.diastolic ELSE i.diastolic
+               END AS triggering_diastolic,
+               CASE WHEN a.reason = 'measurement_confirmation_alert'
+                    THEN c.pulse ELSE i.pulse
+               END AS triggering_pulse,
+               CASE WHEN a.reason = 'measurement_alert_confirmed'
+                    THEN c.systolic END AS confirmation_systolic,
+               CASE WHEN a.reason = 'measurement_alert_confirmed'
+                    THEN c.diastolic END AS confirmation_diastolic,
+               CASE WHEN a.reason = 'measurement_alert_confirmed'
+                    THEN c.pulse END AS confirmation_pulse,
+               strftime(
+                   '%Y-%m-%dT%H:%M:%SZ',
+                   COALESCE(c.measured_at, i.measured_at, m.measured_at),
+                   '+' || m.next_delay_seconds || ' seconds'
+               ) AS next_reading_at
         FROM alerts AS a
         JOIN patient_profiles AS p ON p.id = a.patient_profile_id
+        LEFT JOIN measurements AS m ON m.id = a.measurement_id
+        LEFT JOIN vital_readings AS i
+            ON i.measurement_id = m.id AND i.reading_kind = 'initial'
+        LEFT JOIN vital_readings AS c
+            ON c.measurement_id = m.id AND c.reading_kind = 'confirmation'
         WHERE p.doctor_id = ? AND a.acknowledged_at IS NULL
-        ORDER BY COALESCE(a.grade, 0) DESC, a.created_at ASC, a.id ASC
+        ORDER BY COALESCE(a.grade, 0) DESC, datetime(a.created_at) ASC, a.id ASC
         """,
         (doctor_id,),
     ).fetchall()
@@ -131,7 +172,7 @@ def list_comparison_measurements(database, patient_id):
         SELECT id, measured_at
         FROM measurements
         WHERE patient_profile_id = ?
-          AND measured_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 months')
+          AND measured_at >= strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-30 days')
         ORDER BY measured_at DESC, id DESC
         """,
         (patient_id,),

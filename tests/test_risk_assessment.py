@@ -1,6 +1,10 @@
 import unittest
 
-from app.services.risk_assessment import calculate_risk_result, parse_risk_answers
+from app.services.risk_assessment import (
+    calculate_risk_result,
+    parse_risk_answers,
+    parse_threshold_overrides,
+)
 
 
 def answers(**overrides):
@@ -94,6 +98,32 @@ class RiskAssessmentTests(unittest.TestCase):
         }
         with self.assertRaises(ValueError):
             parse_risk_answers(invalid)
+
+    def test_threshold_override_requires_a_positive_ordered_pair(self):
+        self.assertIsNone(parse_threshold_overrides({}))
+        self.assertEqual(
+            parse_threshold_overrides(
+                {
+                    "systolic_threshold_override": "150",
+                    "diastolic_threshold_override": "95",
+                }
+            ),
+            (150, 95),
+        )
+        for form in (
+            {"systolic_threshold_override": "150"},
+            {
+                "systolic_threshold_override": "90",
+                "diastolic_threshold_override": "100",
+            },
+            {
+                "systolic_threshold_override": "not a number",
+                "diastolic_threshold_override": "80",
+            },
+        ):
+            with self.subTest(form=form):
+                with self.assertRaises(ValueError):
+                    parse_threshold_overrides(form)
 
 
 if __name__ == "__main__":

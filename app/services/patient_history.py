@@ -7,15 +7,11 @@ TIMEFRAMES = {
     "week": "-7 days",
     "two_weeks": "-14 days",
     "thirty_days": "-30 days",
-    "month": "-1 month",
-    "six_months": "-6 months",
 }
 PREVIOUS_TIMEFRAMES = {
     "week": ("-14 days", "-7 days"),
     "two_weeks": ("-28 days", "-14 days"),
     "thirty_days": ("-60 days", "-30 days"),
-    "month": ("-2 months", "-1 month"),
-    "six_months": ("-12 months", "-6 months"),
 }
 MEASUREMENT_FIELDS = ("systolic", "diastolic", "pulse")
 
@@ -69,10 +65,12 @@ def get_patient_history(database, patient, timeframe):
     for measurement in measurements:
         measurement["abnormal_systolic"] = (
             measurement["systolic"] is not None
+            and patient["systolic_threshold"] is not None
             and measurement["systolic"] >= patient["systolic_threshold"]
         )
         measurement["abnormal_diastolic"] = (
             measurement["diastolic"] is not None
+            and patient["diastolic_threshold"] is not None
             and measurement["diastolic"] >= patient["diastolic_threshold"]
         )
         measurement["abnormal"] = (
@@ -137,7 +135,14 @@ def get_measurement_log(database, patient):
         SELECT m.id, m.measured_at, m.grade, m.status,
                COALESCE(c.systolic, i.systolic) AS systolic,
                COALESCE(c.diastolic, i.diastolic) AS diastolic,
-               COALESCE(c.pulse, i.pulse) AS pulse
+               COALESCE(c.pulse, i.pulse) AS pulse,
+               COALESCE(c.systolic, i.systolic)
+                   - COALESCE(c.diastolic, i.diastolic) AS pulse_pressure,
+               COALESCE((
+                   SELECT SUM(s.intensity)
+                   FROM symptom_entries AS s
+                   WHERE s.measurement_id = m.id
+               ), 0) AS symptom_total
         FROM measurements AS m
         LEFT JOIN vital_readings AS i
             ON i.measurement_id = m.id AND i.reading_kind = 'initial'
@@ -152,10 +157,16 @@ def get_measurement_log(database, patient):
         {
             **dict(row),
             "valid": (
-                row["systolic"] is not None
+                row["status"] == "recorded"
+                and row["grade"] == 0
+                and row["systolic"] is not None
                 and row["diastolic"] is not None
+                and patient["systolic_threshold"] is not None
+                and patient["diastolic_threshold"] is not None
                 and row["systolic"] < patient["systolic_threshold"]
                 and row["diastolic"] < patient["diastolic_threshold"]
+                and 20 <= row["pulse_pressure"] <= 60
+                and row["symptom_total"] <= 8
             ),
         }
         for row in rows

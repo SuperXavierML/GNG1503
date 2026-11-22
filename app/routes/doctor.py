@@ -14,7 +14,6 @@ from app.database import get_db
 from app.repositories.messages import create_message, list_messages
 from app.repositories.doctor import (
     acknowledge_alert,
-    create_draft_patient,
     create_note,
     get_measurement_pair,
     get_patient,
@@ -26,10 +25,10 @@ from app.security import doctor_required
 from app.services.patient_history import TIMEFRAMES, get_patient_history
 from app.services.patient_linking import issue_access_code
 from app.services.risk_assessment import (
-    QUESTIONNAIRE_VERSION,
     calculate_risk_result,
+    create_patient_profile,
+    parse_threshold_overrides,
     parse_risk_answers,
-    save_risk_assessment,
 )
 from app.translations import translate
 
@@ -104,64 +103,41 @@ def patient_messages(patient_id):
 @doctor.route("/patients/new", methods=("GET", "POST"))
 @doctor_required
 def new_patient():
+    form_values = {}
     if request.method == "POST":
-        display_name = request.form.get("display_name")
+        form_values = request.form.to_dict()
+        display_name = request.form.get("display_name", "").strip()
         if not display_name or len(display_name) > 100:
             flash("invalid_patient_name", "error")
         else:
-            patient_id = create_draft_patient(
-                get_db(), session["user_id"], display_name
-            )
-            flash("profile_created")
-            return redirect(url_for("doctor.patient_history", patient_id=patient_id))
-    return render_template("doctor/new_patient.html")
+            try:
+                answers = parse_risk_answers(request.form)
+                result = calculate_risk_result(answers)
+                threshold_override = parse_threshold_overrides(request.form)
+                patient_id = create_patient_profile(
+                    get_db(),
+                    session["user_id"],
+                    display_name,
+                    result,
+                    threshold_override,
+                )
+            except ValueError:
+                flash("risk_questionnaire_invalid", "error")
+            else:
+                flash("profile_created")
+                return redirect(
+                    url_for("doctor.patient_history", patient_id=patient_id)
+                )
+    return render_template(
+        "doctor/new_patient.html",
+        form_values=form_values,
+    )
 
 
 @doctor.route("/patients/<int:patient_id>")
 @doctor_required
 def patient_history(patient_id):
     return _render_patient_history(patient_id)
-
-
-@doctor.route("/patients/<int:patient_id>/assessment", methods=("GET", "POST"))
-@doctor_required
-def assess_patient(patient_id):
-    database = get_db()
-    patient = get_patient(database, session["user_id"], patient_id)
-    if patient is None:
-        abort(404)
-    if patient["profile_status"] != "pending_assessment":
-        return redirect(url_for("doctor.patient_history", patient_id=patient_id))
-
-    form_values = {}
-    if request.method == "POST":
-        form_values = request.form.to_dict()
-        try:
-            answers = parse_risk_answers(request.form)
-            result = calculate_risk_result(answers)
-            save_risk_assessment(
-                database,
-                session["user_id"],
-                patient_id,
-                QUESTIONNAIRE_VERSION,
-                result["answers"],
-                result["risk_score"],
-                result["systolic_threshold"],
-                result["diastolic_threshold"],
-            )
-        except ValueError:
-            flash("risk_questionnaire_invalid", "error")
-        else:
-            flash("risk_assessment_saved")
-            return redirect(
-                url_for("doctor.patient_history", patient_id=patient_id)
-            )
-
-    return render_template(
-        "doctor/risk_assessment.html",
-        patient=patient,
-        form_values=form_values,
-    )
 
 
 def _render_patient_history(patient_id, issued_access_code=None):

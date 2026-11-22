@@ -53,14 +53,10 @@
   {% if latest and latest['grade'] > 0 %}
     <p class="alert alert-warning">{{ t('measurement_review_guidance') }}</p>
   {% endif %}
-  {% if latest and latest['pulse_pressure'] is not none and (latest['pulse_pressure'] < 20 or latest['pulse_pressure'] > 60) %}
-    <p class="alert alert-info">{{ t('pulse_pressure_review') }}</p>
-  {% endif %}
-
   <section class="role-card p-4">
     <h2 class="h4">{{ t('latest_measurement') }}</h2>
     {% if latest %}
-      <p class="text-muted">{{ t('recorded_at') }}: {{ latest['measured_at'] }}</p>
+      <p class="text-muted">{{ t('recorded_at') }}: <time datetime="{{ latest['measured_at'] }}" data-utc-time="{{ latest['measured_at'] }}">{{ latest['measured_at'] }}</time></p>
       <dl class="row mb-0">
         <dt class="col-sm-4">{{ t('blood_pressure') }}</dt>
         <dd class="col-sm-8">{{ latest['systolic'] }} / {{ latest['diastolic'] }} mmHg</dd>

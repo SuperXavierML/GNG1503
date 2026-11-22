@@ -19,7 +19,7 @@
                   {{ message['sender_name'] }}
                 {% endif %}
               </strong>
-              <time class="small text-muted">{{ message['sent_at'] }}</time>
+              <time class="small text-muted" data-utc-time="{{ message['sent_at'] }}">{{ message['sent_at'] }}</time>
             </div>
             <p class="mb-0 mt-1">{{ message['body'] }}</p>
           </li>

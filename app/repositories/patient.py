@@ -18,6 +18,8 @@ def get_latest_measurement(database, patient_id):
         """
         SELECT m.id, m.measured_at, m.grade, m.status,
                m.next_delay_seconds,
+               COALESCE(c.measured_at, i.measured_at, m.measured_at)
+                   AS next_due_base,
                COALESCE(c.systolic, i.systolic) AS systolic,
                COALESCE(c.diastolic, i.diastolic) AS diastolic,
                COALESCE(c.pulse, i.pulse) AS pulse,

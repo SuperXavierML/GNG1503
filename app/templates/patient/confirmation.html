@@ -3,16 +3,16 @@
 {% block title %}{{ t('confirm_measurement') }} | {{ t('app_name') }}{% endblock %}
 
 {% block content %}
-<section class="container py-4">
-  <div class="form-panel mx-auto">
-    <h1 class="h2">{{ t('confirm_measurement') }}</h1>
-    <p class="alert alert-info">{{ t('confirmation_instructions') }}</p>
+<section class="confirmation-modal-backdrop">
+  <div class="form-panel confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+    <h1 class="h2" id="confirmation-title">{{ t('confirm_measurement') }}</h1>
+    <p class="alert alert-warning" role="alert" aria-live="assertive">{{ t('confirmation_instructions') }}</p>
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row">
         <div class="col-sm-4 mb-3">
           <label class="form-label" for="systolic">{{ t('systolic') }} (mmHg)</label>
-          <input class="form-control" id="systolic" name="systolic" type="number" min="1" step="1" required>
+          <input class="form-control" id="systolic" name="systolic" type="number" min="1" step="1" required autofocus>
         </div>
         <div class="col-sm-4 mb-3">
           <label class="form-label" for="diastolic">{{ t('diastolic') }} (mmHg)</label>

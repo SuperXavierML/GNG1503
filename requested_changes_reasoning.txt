@@ -1,0 +1,81 @@
+Requested changes: implementation reasoning
+==========================================
+
+Time display
+------------
+Measurement timestamps and database-generated timestamps remain stored as UTC.
+The existing SQLite filters and CSV export therefore keep their current
+behavior and remain consistent. Browser Intl formatting uses the IANA zone
+America/Toronto, giving UTC-5 in winter and UTC-4 during daylight saving time
+without adding a Python package or relying on a Windows time-zone database.
+The shared formatter is used by measurement history, dashboards, comparison
+labels, notes, alerts, and messages. Chart axes omit timestamp labels; the
+active-point tooltip supplies the selected reading's local date and time.
+
+Account creation and linking
+----------------------------
+Doctor registration now establishes the same authenticated session used by
+the normal login route and redirects to the doctor dashboard. Patient access
+code redemption already created an authenticated patient session; both flows
+now use one session helper so their identity, language, and theme fields stay
+consistent. Access-code copying is handled in the existing doctor-history
+script. The patient-link navigation is hidden only after a successful copy on
+the current page. Unsupported clipboard access and copy errors are announced
+without hiding the navigation or removing the displayed code.
+
+Visual styling and notices
+--------------------------
+The existing shared stylesheet remains the source of truth. Its light palette,
+font family, base text and heading sizes, control sizing, focus ring, and chart
+colors now follow reference.txt while the existing dark theme variables and
+Bootstrap alert/status classes remain in place. The pulse-pressure notice is
+removed from the patient dashboard only; pressure calculations and measurement
+behavior are unchanged.
+
+Verification
+------------
+Focused tests cover doctor sign-in after registration, patient sign-in after
+linking, local-time timestamp markup, the access-code copy controls, and
+removal of the dashboard pulse-pressure notice. No database schema changes or
+new dependencies are required.
+
+Template styling follow-up
+--------------------------
+The shared stylesheet now uses template.txt's system-ui font and blue, ink,
+soft-gray, and pale-blue palette. the existing larger type scale and all page
+structure, spacing, responsive navigation, and grid rules remain unchanged.
+Dark-mode tokens and Bootstrap's semantic alert/status colors are deliberately
+left intact; only the general accent, surfaces, focus ring, and primary-button
+colors follow the template palette. Non-alert chart series use template blue,
+ink, muted, and amber colors; red threshold markers remain unchanged.
+
+Specifications and workflow follow-up
+-------------------------------------
+The symptom trigger is now a total greater than 8, following the newer
+specification; the directly related legacy application specification was
+updated to avoid retaining the superseded value and alert rule. The first
+reading is compared with an assumed Grade 0, so a
+first abnormal result enters mandatory confirmation. A patient-route guard
+redirects requests to the confirmation dialog until the pending reading is
+submitted. Each abnormal measurement creates a linked doctor alert in the same
+database transaction; its confirmation updates that alert and reopens it if
+previously acknowledged. The alert retains the highest observed grade so a
+confirmation cannot silently erase the original warning. Alert cards show the
+triggering and confirmation readings, emission time, and next-reading time.
+
+Patient creation now validates the complete risk questionnaire before saving
+anything. Profile and assessment records are committed atomically, and a
+doctor may provide both systolic and diastolic overrides or leave both blank
+to use the calculated pair. The former post-creation assessment route is
+removed; existing unfinished legacy profiles are not offered a late-edit
+path. Ready profiles expose the existing access-code action immediately.
+
+History validity now requires a recorded Grade 0 reading, values below both
+personal thresholds, pulse pressure from 20 through 60 mmHg, and symptom total
+of 8 or less. Patient and doctor history selectors use the same 7-, 14-, and
+30-day periods. Doctor patient cards show the latest grade with the same
+status labels and semantic colors as the patient dashboard. The diastolic
+chart series uses green, while abnormal points keep their red triangle
+markers. The bottom navigation remains available to both roles, including
+Messages, and uses horizontal scrolling on narrow screens instead of forcing
+all tabs into cramped equal-width columns.

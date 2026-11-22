@@ -18,9 +18,28 @@
   {% if patients %}
     <div class="row g-3">
       {% for patient in patients %}
+        {% set grade = patient['grade'] if patient['grade'] is not none else 0 %}
+        {% if grade == 0 %}
+          {% set health_label = 'health_good' %}
+          {% set health_class = 'btn-success' %}
+        {% elif grade == 1 %}
+          {% set health_label = 'health_high' %}
+          {% set health_class = 'btn-warning' %}
+        {% elif grade == 2 %}
+          {% set health_label = 'health_elevated' %}
+          {% set health_class = 'status-orange' %}
+        {% else %}
+          {% set health_label = 'health_critical' %}
+          {% set health_class = 'btn-danger' %}
+        {% endif %}
         <div class="col-md-6 col-lg-4">
           <article class="role-card h-100 p-4">
-            <h2 class="h5">{{ patient['display_name'] }}</h2>
+            <h2 class="h5">
+              {{ patient['display_name'] }}
+              <span class="btn btn-sm status-badge {{ health_class }}" role="status">
+                {{ t(health_label) }}{% if grade %} - {{ t('grade') }} {{ grade }}{% endif %}
+              </span>
+            </h2>
             <p>{{ t('status_' ~ patient['profile_status']) }}</p>
             <p>{{ t('new_alerts') }}: {{ patient['new_alert_count'] }}</p>
             <div class="d-flex flex-wrap gap-2">

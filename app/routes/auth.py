@@ -12,6 +12,7 @@ from flask import (
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.database import get_db
+from app.security import establish_user_session
 
 
 auth = Blueprint("auth", __name__, url_prefix="/auth")
@@ -44,8 +45,21 @@ def register():
                     ),
                 )
                 database.commit()
+                user = database.execute(
+                    """
+                    SELECT id, display_name, email, role,
+                           preferred_language, theme_preference
+                    FROM users WHERE email = ?
+                    """,
+                    (email,),
+                ).fetchone()
+                if user is None:
+                    raise RuntimeError(
+                        "Created doctor account could not be loaded."
+                    )
+                establish_user_session(user)
                 flash("doctor_account_created")
-                return redirect(url_for("auth.login"))
+                return redirect(url_for("doctor.dashboard"))
             except sqlite3.IntegrityError:
                 get_db().rollback()
                 error = "email_exists"
@@ -73,14 +87,7 @@ def login():
         if user is None or not check_password_hash(user["password_hash"], password):
             flash("invalid_login", "error")
         else:
-            session.clear()
-            session["user_id"] = user["id"]
-            session["user_role"] = user["role"]
-            session["display_name"] = (
-                user["display_name"] or user["email"].split("@", 1)[0]
-            )
-            session["language"] = user["preferred_language"]
-            session["theme"] = user["theme_preference"]
+            establish_user_session(user)
             if user["role"] == "doctor":
                 return redirect(url_for("doctor.dashboard"))
             return redirect(url_for("patient.dashboard"))

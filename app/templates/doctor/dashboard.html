@@ -20,8 +20,31 @@
           <article class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-3">
             <a class="alert-details" href="{{ url_for('doctor.patient_history', patient_id=alert['patient_id']) }}">
               <strong>{{ alert['patient_name'] }}</strong>
-              <span class="ms-2">{{ t('grade') }} {{ alert['grade'] or '-' }} - {{ alert['reason'] }}</span>
-              <span class="small text-muted d-block">{{ alert['created_at'] }}</span>
+              <span class="btn btn-sm status-badge ms-2 {{ 'btn-warning' if alert['grade'] == 1 else 'status-orange' if alert['grade'] == 2 else 'btn-danger' }}">
+                {{ t('grade') }} {{ alert['grade'] or '-' }}
+              </span>
+              <p class="mb-1">{{ t(alert['reason']) }}</p>
+              {% if alert['triggering_systolic'] is not none %}
+                <span class="small d-block">
+                  {{ t('triggering_reading') }}:
+                  {{ alert['triggering_systolic'] }}/{{ alert['triggering_diastolic'] }} mmHg,
+                  {{ alert['triggering_pulse'] }} bpm
+                </span>
+              {% endif %}
+              {% if alert['confirmation_systolic'] is not none %}
+                <span class="small d-block">
+                  {{ t('confirmation_reading') }}:
+                  {{ alert['confirmation_systolic'] }}/{{ alert['confirmation_diastolic'] }} mmHg,
+                  {{ alert['confirmation_pulse'] }} bpm
+                  ({{ t('grade') }} {{ alert['measurement_grade'] }})
+                </span>
+              {% endif %}
+              <time class="small text-muted d-block" data-utc-time="{{ alert['created_at'] }}">{{ alert['created_at'] }}</time>
+              {% if alert['next_reading_at'] %}
+                <span class="small text-muted">{{ t('next_measurement') }}:
+                  <time data-utc-time="{{ alert['next_reading_at'] }}">{{ alert['next_reading_at'] }}</time>
+                </span>
+              {% endif %}
             </a>
             <form method="post" action="{{ url_for('doctor.acknowledge_patient_alert', alert_id=alert['id']) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

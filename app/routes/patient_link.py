@@ -1,8 +1,9 @@
 import sqlite3
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from app.database import get_db
+from app.security import establish_user_session
 from app.services.patient_linking import redeem_access_code
 
 
@@ -29,10 +30,9 @@ def link_account():
                 linked = False
 
             if linked:
-                session.clear()
                 patient_user = get_db().execute(
                     """
-                    SELECT id, display_name, email, preferred_language,
+                    SELECT id, display_name, email, role, preferred_language,
                            theme_preference
                     FROM users WHERE email = ? AND role = 'patient'
                     """,
@@ -42,14 +42,7 @@ def link_account():
                     raise RuntimeError(
                         "Redeemed access code did not create a patient account."
                     )
-                session["user_id"] = patient_user["id"]
-                session["user_role"] = "patient"
-                session["display_name"] = (
-                    patient_user["display_name"]
-                    or patient_user["email"].split("@", 1)[0]
-                )
-                session["language"] = patient_user["preferred_language"]
-                session["theme"] = patient_user["theme_preference"]
+                establish_user_session(patient_user)
                 flash("linked")
                 return redirect(url_for("patient.dashboard"))
             flash("invalid_code", "error")

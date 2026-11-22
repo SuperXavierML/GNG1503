@@ -21,7 +21,8 @@ class MonitoringTests(unittest.TestCase):
     def test_pulse_pressure_and_symptom_score_affect_grade(self):
         self.assertEqual(classify_grade(120, 59, self.patient), 1)
         self.assertEqual(classify_grade(120, 80, self.patient, 5), 0)
-        self.assertEqual(classify_grade(120, 80, self.patient, 6), 1)
+        self.assertEqual(classify_grade(120, 80, self.patient, 8), 0)
+        self.assertEqual(classify_grade(120, 80, self.patient, 9), 1)
 
 
 if __name__ == "__main__":

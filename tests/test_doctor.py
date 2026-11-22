@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 
 from app import create_app
 from app.database import get_db, initialize_database
+from app.repositories.doctor import create_draft_patient
 from app.services.patient_history import get_patient_history
 from app.services.patient_linking import issue_access_code
 from app.services.risk_assessment import save_risk_assessment
@@ -91,6 +92,9 @@ class DoctorWorkflowTests(unittest.TestCase):
             follow_redirects=True,
         )
         self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Doctor dashboard", response.data)
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["user_role"], "doctor")
         with self.app.app_context():
             user = get_db().execute(
                 "SELECT role, password_hash FROM users WHERE email = ?",
@@ -99,7 +103,6 @@ class DoctorWorkflowTests(unittest.TestCase):
         self.assertEqual(user["role"], "doctor")
         self.assertNotEqual(user["password_hash"], "safe-test-password")
 
-        self.sign_in("new-doctor@example.test", "safe-test-password")
         response = self.client.get("/doctor/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Doctor dashboard", response.data)
@@ -204,8 +207,10 @@ class DoctorWorkflowTests(unittest.TestCase):
             data={"csrf_token": self.csrf_token()},
             follow_redirects=True,
         )
-        match = re.search(rb"<code>([^<]+)</code>", response.data)
+        match = re.search(rb"<code[^>]*>([^<]+)</code>", response.data)
         self.assertIsNotNone(match)
+        self.assertIn(b'id="copy-access-code"', response.data)
+        self.assertIn(b'id="link-patient-after-copy"', response.data)
         self.assertIn("no-store", response.headers.get("Cache-Control", ""))
         code = match.group(1).decode("utf-8")
         with self.client.session_transaction() as session:
@@ -263,6 +268,10 @@ class DoctorWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"id=\"blood-pressure-chart\"", response.data)
         self.assertIn(b"id=\"symptom-chart\"", response.data)
+        self.assertIn(b'data-utc-time="', response.data)
+        self.assertIn(b"30 days", response.data)
+        self.assertNotIn(b"1 month", response.data)
+        self.assertNotIn(b"6 months", response.data)
 
         with self.app.app_context():
             database = get_db()
@@ -326,8 +335,14 @@ class DoctorWorkflowTests(unittest.TestCase):
 
         response = self.client.get(f"/doctor/patients/{patient_id}")
 
-        self.assertIn(f'value="{second_id}" selected'.encode("utf-8"), response.data)
-        self.assertIn(f'value="{first_id}" selected'.encode("utf-8"), response.data)
+        self.assertRegex(
+            response.data.decode("utf-8"),
+            rf'<option value="{second_id}"[^>]*selected>',
+        )
+        self.assertRegex(
+            response.data.decode("utf-8"),
+            rf'<option value="{first_id}"[^>]*selected>',
+        )
         response = self.client.get(
             f"/doctor/patients/{patient_id}?first={first_id}&second={second_id}"
         )
@@ -389,7 +404,7 @@ class DoctorWorkflowTests(unittest.TestCase):
             ).fetchone()["acknowledged_at"]
         self.assertIsNotNone(acknowledged_at)
 
-    def test_patient_draft_waits_for_approved_assessment_before_linking(self):
+    def test_patient_profile_is_not_created_without_completed_questionnaire(self):
         self.create_doctor()
         self.sign_in()
         self.client.get("/doctor/patients/new")
@@ -401,52 +416,98 @@ class DoctorWorkflowTests(unittest.TestCase):
             },
             follow_redirects=True,
         )
-        self.assertIn(
-            b"Risk questionnaire and approved scoring rules are required",
-            response.data,
-        )
+        self.assertIn(b"answer every risk question", response.data)
         with self.app.app_context():
-            database = get_db()
-            patient = database.execute(
-                """
-                SELECT id, profile_status, initial_delay_seconds
-                FROM patient_profiles WHERE display_name = ?
-                """,
-                ("Draft Patient",),
-            ).fetchone()
-        self.assertEqual(patient["profile_status"], "pending_assessment")
-        self.assertEqual(patient["initial_delay_seconds"], 24 * 60 * 60)
+            patient_count = get_db().execute(
+                "SELECT COUNT(*) FROM patient_profiles"
+            ).fetchone()[0]
+        self.assertEqual(patient_count, 0)
 
-        response = self.client.post(
-            f"/doctor/patients/{patient['id']}/access-code",
-            data={"csrf_token": self.csrf_token()},
-            follow_redirects=True,
+    def test_legacy_incomplete_profile_has_no_late_assessment_path(self):
+        doctor_id = self.create_doctor()
+        with self.app.app_context():
+            patient_id = create_draft_patient(
+                get_db(), doctor_id, "Legacy Incomplete Patient"
+            )
+        self.sign_in()
+
+        response = self.client.get(f"/doctor/patients/{patient_id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"cannot be activated", response.data)
+        self.assertNotIn(b"Complete risk questionnaire", response.data)
+        self.assertEqual(
+            self.client.get(
+                f"/doctor/patients/{patient_id}/assessment"
+            ).status_code,
+            404,
         )
-        self.assertIn(b"Complete the approved risk assessment", response.data)
 
-    def test_doctor_questionnaire_activates_profile_before_code_issue(self):
+    def test_doctor_creates_assessed_profile_with_optional_threshold_override(self):
         self.create_doctor()
         self.sign_in()
         self.client.get("/doctor/patients/new")
-        self.client.post(
+        response = self.client.post(
             "/doctor/patients/new",
             data={
                 "csrf_token": self.csrf_token(),
                 "display_name": "Assessed Patient",
+                "age_years": "40",
+                "height_cm": "160",
+                "weight_kg": "60",
+                "alcohol_standard_drinks_per_week": "2",
+                "current_smoker": "no",
+                "pregnant": "not_applicable",
+                "cardiovascular_disease": "no",
+                "stroke_tia_history": "no",
+                "premature_family_history": "no",
+                "chronic_kidney_disease": "no",
+                "diabetes_type": "none",
+                "systolic_threshold_override": "150",
+                "diastolic_threshold_override": "95",
             },
             follow_redirects=True,
         )
+        self.assertIn(
+            b"Patient profile created and risk assessment saved",
+            response.data,
+        )
         with self.app.app_context():
-            patient_id = get_db().execute(
-                "SELECT id FROM patient_profiles WHERE display_name = ?",
+            database = get_db()
+            profile = database.execute(
+                """
+                SELECT id, profile_status, systolic_threshold,
+                       diastolic_threshold, initial_delay_seconds
+                FROM patient_profiles WHERE display_name = ?
+                """,
                 ("Assessed Patient",),
-            ).fetchone()["id"]
+            ).fetchone()
+            answer_count = database.execute(
+                """
+                SELECT COUNT(*) FROM risk_answers
+                JOIN risk_assessments ON risk_assessments.id = risk_answers.assessment_id
+                WHERE risk_assessments.patient_profile_id = ?
+                """,
+                (profile["id"],),
+            ).fetchone()[0]
+        self.assertEqual(profile["profile_status"], "ready")
+        self.assertEqual(profile["systolic_threshold"], 150)
+        self.assertEqual(profile["diastolic_threshold"], 95)
+        self.assertEqual(profile["initial_delay_seconds"], 24 * 60 * 60)
+        self.assertEqual(answer_count, 14)
+        self.assertIn(b"Generate one-time access code", response.data)
+        self.assertEqual(
+            self.client.get(
+                f"/doctor/patients/{profile['id']}/assessment"
+            ).status_code,
+            404,
+        )
 
-        self.client.get(f"/doctor/patients/{patient_id}/assessment")
-        response = self.client.post(
-            f"/doctor/patients/{patient_id}/assessment",
+        calculated_response = self.client.post(
+            "/doctor/patients/new",
             data={
                 "csrf_token": self.csrf_token(),
+                "display_name": "Calculated Threshold Patient",
                 "age_years": "40",
                 "height_cm": "160",
                 "weight_kg": "60",
@@ -461,31 +522,20 @@ class DoctorWorkflowTests(unittest.TestCase):
             },
             follow_redirects=True,
         )
-        self.assertIn(b"Risk assessment saved.", response.data)
-
+        self.assertIn(
+            b"Generate one-time access code",
+            calculated_response.data,
+        )
         with self.app.app_context():
-            database = get_db()
-            profile = database.execute(
+            thresholds = get_db().execute(
                 """
-                SELECT profile_status, systolic_threshold, diastolic_threshold,
-                       initial_delay_seconds
-                FROM patient_profiles WHERE id = ?
-                """,
-                (patient_id,),
+                SELECT systolic_threshold, diastolic_threshold
+                FROM patient_profiles
+                WHERE display_name = 'Calculated Threshold Patient'
+                """
             ).fetchone()
-            answer_count = database.execute(
-                """
-                SELECT COUNT(*) FROM risk_answers
-                JOIN risk_assessments ON risk_assessments.id = risk_answers.assessment_id
-                WHERE risk_assessments.patient_profile_id = ?
-                """,
-                (patient_id,),
-            ).fetchone()[0]
-        self.assertEqual(profile["profile_status"], "ready")
-        self.assertEqual(profile["systolic_threshold"], 140)
-        self.assertEqual(profile["diastolic_threshold"], 90)
-        self.assertEqual(profile["initial_delay_seconds"], 24 * 60 * 60)
-        self.assertEqual(answer_count, 14)
+        self.assertEqual(thresholds["systolic_threshold"], 140)
+        self.assertEqual(thresholds["diastolic_threshold"], 90)
 
     def test_expired_patient_invite_cannot_be_redeemed(self):
         doctor_id = self.create_doctor()

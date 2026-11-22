@@ -1,4 +1,26 @@
 (() => {
+  const copyButton = document.getElementById("copy-access-code");
+  if (copyButton) {
+    const status = document.getElementById("copy-access-code-status");
+    const link = document.getElementById("link-patient-after-copy");
+
+    copyButton.addEventListener("click", async () => {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) {
+        status.textContent = copyButton.dataset.copyError;
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(copyButton.dataset.accessCode);
+        status.textContent = copyButton.dataset.copiedLabel;
+        link.hidden = true;
+      } catch (error) {
+        console.error("Unable to copy the patient access code.", error);
+        status.textContent = copyButton.dataset.copyError;
+      }
+    });
+  }
+
   const element = document.getElementById("history-data");
   if (!element || typeof Chart === "undefined") {
     return;
@@ -7,11 +29,23 @@
   const history = JSON.parse(element.textContent);
   const labels = history.labels;
   const readings = history.measurements;
+  const dateAxis = {
+    ticks: { callback: () => "" },
+  };
   const lineOptions = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { intersect: false, mode: "index" },
-    scales: { y: { beginAtZero: true } },
+    plugins: {
+      tooltip: {
+        callbacks: {
+          title: (items) => items.length
+            ? window.formatMeasurementTimestamp(items[0].label)
+            : "",
+        },
+      },
+    },
+    scales: { x: dateAxis, y: { beginAtZero: true } },
   };
 
   const bloodPressure = document.getElementById("blood-pressure-chart");
@@ -23,12 +57,12 @@
         {
           label: history.labels_text.systolic,
           data: readings.map((row) => row.systolic),
-          borderColor: "#176b70",
+          borderColor: "#2854dd",
           pointBackgroundColor: readings.map((row) =>
-            row.abnormal_systolic ? "#c00000" : "#176b70",
+            row.abnormal_systolic ? "#c00000" : "#2854dd",
           ),
           pointBorderColor: readings.map((row) =>
-            row.abnormal_systolic ? "#c00000" : "#176b70",
+            row.abnormal_systolic ? "#c00000" : "#2854dd",
           ),
           pointStyle: readings.map((row) =>
             row.abnormal_systolic ? "triangle" : "circle",
@@ -41,12 +75,12 @@
         {
           label: history.labels_text.diastolic,
           data: readings.map((row) => row.diastolic),
-          borderColor: "#d27630",
+          borderColor: "#2e8b57",
           pointBackgroundColor: readings.map((row) =>
-            row.abnormal_diastolic ? "#c00000" : "#d27630",
+            row.abnormal_diastolic ? "#c00000" : "#2e8b57",
           ),
           pointBorderColor: readings.map((row) =>
-            row.abnormal_diastolic ? "#c00000" : "#d27630",
+            row.abnormal_diastolic ? "#c00000" : "#2e8b57",
           ),
           pointStyle: readings.map((row) =>
             row.abnormal_diastolic ? "triangle" : "circle",
@@ -59,21 +93,21 @@
         {
           label: history.labels_text.pulse_pressure,
           data: readings.map((row) => row.pulse_pressure),
-          borderColor: "#7554a4",
+          borderColor: "#657084",
           yAxisID: "y1",
           tension: 0.2,
         },
         {
           label: `${history.labels_text.threshold} (${history.labels_text.systolic})`,
           data: labels.map(() => history.threshold.systolic),
-          borderColor: "#a33b3b",
+          borderColor: "#c00000",
           borderDash: [6, 4],
           pointRadius: 0,
         },
         {
           label: `${history.labels_text.threshold} (${history.labels_text.diastolic})`,
           data: labels.map(() => history.threshold.diastolic),
-          borderColor: "#d18a8a",
+          borderColor: "#c00000",
           borderDash: [2, 4],
           pointRadius: 0,
         },
@@ -82,6 +116,7 @@
     options: {
       ...lineOptions,
       scales: {
+        x: dateAxis,
         y: { beginAtZero: false },
         y1: {
           position: "right",
@@ -127,7 +162,7 @@
         {
           label: history.labels_text.pulse,
           data: readings.map((row) => row.pulse),
-          borderColor: "#176b70",
+          borderColor: "#2854dd",
           tension: 0.2,
         },
       ],
@@ -146,13 +181,13 @@
           {
             label: history.labels_text.systolic,
             data: comparison.map((reading) => reading.systolic),
-            borderColor: "#b4232e",
+            borderColor: "#2854dd",
             tension: 0.2,
           },
           {
             label: history.labels_text.diastolic,
             data: comparison.map((reading) => reading.diastolic),
-            borderColor: "#2854dd",
+            borderColor: "#2e8b57",
             tension: 0.2,
           },
           {
@@ -167,6 +202,7 @@
       options: {
         ...lineOptions,
         scales: {
+          x: dateAxis,
           y: { beginAtZero: false, title: { display: true, text: "mmHg" } },
           y1: {
             position: "right",

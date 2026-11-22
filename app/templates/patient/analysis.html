@@ -16,7 +16,7 @@
   <h1 class="h2">{{ t('analysis') }}</h1>
   <p class="text-muted">{{ account_display_name }}</p>
   <nav class="analysis-ranges mb-4" aria-label="{{ t('timeframe') }}">
-    {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('thirty_days', 'thirty_days'), ('month', 'month'), ('six_months', 'six_months')] %}
+    {% for key, label_key in [('week', 'week'), ('two_weeks', 'two_weeks'), ('thirty_days', 'thirty_days')] %}
       <a class="btn {{ 'btn-primary' if timeframe == key else 'btn-outline-primary' }}" href="{{ url_for('patient.analysis', range=key) }}" {{ 'aria-current=page' if timeframe == key else '' }}>{{ t(label_key) }}</a>
     {% endfor %}
   </nav>
